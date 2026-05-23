@@ -107,6 +107,12 @@ def test_wizard_portscan_finds_nothing_falls_back_to_manual_url(tmp_path: Path, 
     assert loaded.beacon_node_url == "http://192.168.10.15:24010"
     assert loaded.alerts.ntfy_topic == ""
     assert notifier.sent == []
+    # Manual-URL fallback must give the user enough context to enter a valid URL
+    written = "".join(prompts.written)
+    assert "Examples:" in written
+    assert "http://localhost:24010" in written
+    assert "/eth/v1/node/version" in written
+    assert "curl" in written
 
 
 def test_wizard_multiple_ports_respond_triggers_selection_prompt(tmp_path: Path, monkeypatch):
