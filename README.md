@@ -5,6 +5,7 @@ A tiny self-hosted CLI for Ethereum validator stats. Talks to your own beacon no
 **v1 surface:**
 
 ```
+eth-validator-stats init                  # interactive wizard: detect node, set up ntfy
 eth-validator-stats status                # rich table snapshot
 eth-validator-stats check [--missed N]    # cron mode: prints offenders, exits 2 if any
 eth-validator-stats info                  # probe beacon node: client/version + endpoint support
@@ -87,7 +88,9 @@ Cron should not invoke `uv run` (it pays the resolver/lock cost every minute). U
 
 ### Push notifications (ntfy)
 
-If you set `ntfy_topic` under `alerts` in `config.yml`, `check` will POST to that ntfy topic on every **new** alert transition (no spam — see dedup/storm below). Setup:
+If `ntfy_topic` is set under `alerts:` in `config.yml`, `check` POSTs to that ntfy topic on every **new** alert transition (no spam — see dedup/storm below).
+
+The fastest way to wire this up is `eth-validator-stats init`, which generates an unguessable topic and sends a verification push so you can confirm delivery before trusting the alert path. If you skipped that step or want to change topics later:
 
 1. Install the **ntfy** app (Play Store, App Store, F-Droid) on your phone.
 2. In the app: Subscribe → enter an unguessable topic name (e.g. `eth-vstats-9f8e7d6c5b4a`). Anyone who knows the name can read messages, so treat it as a secret.
@@ -145,7 +148,7 @@ Liveness answers "the validator was seen in the epoch", which is what most users
 - No historical query command.
 - No `validators add/list/rm` CRUD — edit the YAML directly.
 
-See the plan file in `.claude/plans/` (or the v2 backlog at the bottom of it) for what's next.
+See [docs/superpowers/plans/](docs/superpowers/plans/) and [docs/superpowers/specs/](docs/superpowers/specs/) for what's next (Telegram interaction is the planned follow-up).
 
 ## Tests
 
