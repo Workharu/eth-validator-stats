@@ -113,6 +113,25 @@ def _resolve_existing_config() -> tuple[Path, bool]:
     return (yml, False)
 
 
+def migrate_from_toml(toml_path: Path, yml_path: Path) -> Path:
+    """Read a TOML config, write an equivalent YAML config, rename the TOML to .bak.
+    Returns the backup path. Raises SystemExit if yml_path already exists.
+    """
+    if yml_path.exists():
+        raise SystemExit(
+            f"refusing to migrate: {yml_path} already exists. "
+            f"Move or delete it first."
+        )
+    # Parse the legacy TOML (without printing the deprecation hint)
+    cfg = load_config(toml_path)
+    # Write YAML
+    write_config(cfg, yml_path)
+    # Rename original to .bak
+    backup = toml_path.with_suffix(toml_path.suffix + ".bak")
+    toml_path.rename(backup)
+    return backup
+
+
 def _parse_config(raw: dict) -> AppConfig:
     url = os.environ.get("BEACON_NODE_URL") or raw.get("beacon_node_url") or DEFAULT_BEACON_URL
     auth_token = os.environ.get("BEACON_NODE_AUTH_TOKEN") or str(raw.get("beacon_auth_token", "") or "")

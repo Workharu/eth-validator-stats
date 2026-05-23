@@ -10,6 +10,7 @@ from eth_validator_stats.config_io import (
     AppConfig,
     ConfigEntry,
     load_config,
+    migrate_from_toml,
     write_config,
 )
 
@@ -104,3 +105,41 @@ def test_yaml_load_rejects_python_object_tag(tmp_path: Path):
     )
     with pytest.raises(Exception):  # YAMLError or ConstructorError — both acceptable
         load_config(p)
+
+
+def test_migrate_from_toml_creates_equivalent_yaml(tmp_path: Path):
+    src = tmp_path / "config.toml"
+    src.write_text(
+        'beacon_node_url = "http://localhost:3500"\n'
+        '[[validators]]\n'
+        'pubkey = "0xabc"\n'
+        'label = "v1"\n'
+        '[[validators]]\n'
+        'index = 42\n'
+        '[alerts]\n'
+        'ntfy_topic = "https://ntfy.sh/eth-vstats-x"\n'
+        'cooldown_minutes = 15\n'
+    )
+    dst = tmp_path / "config.yml"
+    backup = migrate_from_toml(src, dst)
+
+    assert dst.exists()
+    assert backup.exists()
+    assert backup.name == "config.toml.bak"
+    assert not src.exists()  # original was renamed
+
+    loaded = load_config(dst)
+    assert loaded.beacon_node_url == "http://localhost:3500"
+    assert len(loaded.validators) == 2
+    assert loaded.validators[0].pubkey == "0xabc"
+    assert loaded.validators[1].index == 42
+    assert loaded.alerts.cooldown_minutes == 15
+
+
+def test_migrate_from_toml_refuses_if_yaml_exists(tmp_path: Path):
+    src = tmp_path / "config.toml"
+    src.write_text('beacon_node_url = "http://x"\n[[validators]]\nindex = 1\n')
+    dst = tmp_path / "config.yml"
+    dst.write_text("# pre-existing\n")
+    with pytest.raises(SystemExit, match="already exists"):
+        migrate_from_toml(src, dst)
