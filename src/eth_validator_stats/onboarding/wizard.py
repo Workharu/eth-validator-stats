@@ -57,13 +57,16 @@ def run_wizard(
     topic_generator: TopicGenerator | None = None,
 ) -> int:
     io = io or StdIO()
-    portscan_fn = portscan_fn or default_scan
     beacon_client_factory = beacon_client_factory or _default_beacon_factory
     notifier_factory = notifier_factory or _default_notifier_factory
     topic_generator = topic_generator or _default_topic_generator
 
-    # Step 1 — Beacon node URL
-    beacon_url, _client_version = _step_beacon_url(args, io, portscan_fn)
+    # Step 1 — Beacon node URL (may skip portscan entirely if --beacon-url given)
+    if args.beacon_url:
+        beacon_url = args.beacon_url
+    else:
+        portscan_fn = portscan_fn or default_scan
+        beacon_url, _ = _step_beacon_url(args, io, portscan_fn)
 
     # Step 2 — Optional auth
     auth_token = _step_auth(args, io)
