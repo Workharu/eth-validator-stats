@@ -260,6 +260,64 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 2
 
 
+def cmd_init(args: argparse.Namespace) -> int:
+    from .config_io import config_path as _cfg_path, legacy_toml_path
+    from .onboarding import WizardArgs, run_wizard
+
+    cfg_path = _cfg_path()
+    legacy = legacy_toml_path()
+
+    # Step 0 — Existing-config check
+    yml_exists = cfg_path.exists()
+    toml_exists = legacy.exists()
+
+    if args.migrate:
+        from .config_io import migrate_from_toml
+        if not toml_exists:
+            print(f"no legacy TOML config to migrate at {legacy}", file=sys.stderr)
+            return 1
+        if yml_exists and not args.force:
+            print(
+                f"{cfg_path} already exists. Move/delete it or rerun with --force.",
+                file=sys.stderr,
+            )
+            return 1
+        if yml_exists and args.force:
+            cfg_path.unlink()
+        backup = migrate_from_toml(legacy, cfg_path)
+        print(f"✓ migrated. legacy file backed up to {backup}")
+        return 0
+
+    if yml_exists and not args.force:
+        print(
+            f"config already exists at {cfg_path}. "
+            f"Run with --force to overwrite, or edit the file directly."
+        )
+        return 0
+
+    if toml_exists and not yml_exists and not args.force:
+        print(f"found legacy TOML config at {legacy}")
+        ans = input("Migrate to YAML now? [Y/n]: ").strip().lower()
+        if ans in ("", "y", "yes"):
+            from .config_io import migrate_from_toml
+            backup = migrate_from_toml(legacy, cfg_path)
+            print(f"✓ migrated. legacy file backed up to {backup}")
+            return 0
+
+    w = WizardArgs(
+        host=args.host,
+        beacon_url=args.beacon_url,
+        auth_token=args.auth_token,
+        validator=args.validator,
+        label=args.label,
+        ntfy_topic=args.ntfy_topic,
+        no_ntfy=args.no_ntfy,
+        yes=args.yes,
+        force=args.force,
+    )
+    return run_wizard(w, cfg_path=cfg_path)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="eth-validator-stats",
@@ -276,6 +334,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_info = sub.add_parser("info", help="Probe the beacon node and report client/version + endpoint support.")
     p_info.set_defaults(func=cmd_info)
+
+    p_init = sub.add_parser("init", help="Interactive (or flag-driven) onboarding wizard.")
+    host_group = p_init.add_mutually_exclusive_group()
+    host_group.add_argument("--host", help="Beacon node host to scan (mutually exclusive with --beacon-url).")
+    host_group.add_argument("--beacon-url", help="Full beacon node URL, skip the scan.")
+    p_init.add_argument("--auth-token", help="Bearer token for beacon API auth.")
+    p_init.add_argument("--validator", help="Pubkey or index of the starter validator.")
+    p_init.add_argument("--label", help="Label for the starter validator.")
+    ntfy_group = p_init.add_mutually_exclusive_group()
+    ntfy_group.add_argument("--ntfy-topic", help="ntfy topic name or full URL.")
+    ntfy_group.add_argument("--no-ntfy", action="store_true", help="Skip notification setup.")
+    p_init.add_argument("--yes", action="store_true", help="Accept defaults and skip confirmation prompts.")
+    p_init.add_argument("--force", action="store_true", help="Overwrite existing config.")
+    p_init.add_argument("--migrate", action="store_true", help="Only migrate legacy TOML to YAML, then exit.")
+    p_init.set_defaults(func=cmd_init)
 
     return parser
 
