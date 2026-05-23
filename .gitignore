@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# uv / virtualenvs
+.venv/
+
+# Runtime config & state (machine-local, may contain secrets or validator data)
+/config.toml
+/config.yml
+state.json
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,40 @@
+# Copy to $XDG_CONFIG_HOME/eth-validator-stats/config.toml
+# (typically ~/.config/eth-validator-stats/config.toml)
+
+# Beacon node base URL: scheme + host + port only, NO API path.
+# Right:  http://localhost:3500
+# Wrong:  http://localhost:3500/eth/v1/beacon/headers/head
+# Env var BEACON_NODE_URL overrides this.
+# Default ports by client: Prysm 3500, Lighthouse 5052, Teku 5051,
+# Nimbus 5052, Lodestar 9596. See COMPATIBILITY.md.
+beacon_node_url = "http://localhost:3500"
+
+# Optional Bearer token (for hosted providers like Infura/Alchemy/QuickNode,
+# or any reverse-proxied node). Env BEACON_NODE_AUTH_TOKEN wins over this.
+# Leave commented out (or empty) for plain local nodes.
+# beacon_auth_token = "your-bearer-token-here"
+
+# One [[validators]] block per validator. Identify by pubkey OR index.
+# label is optional but recommended.
+
+[[validators]]
+pubkey = "0xb1d2a4b9c5b4f1e6a8b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0"
+label  = "home-1"
+
+[[validators]]
+index = 12345
+label  = "home-2"
+
+# Optional. If `ntfy_topic` is omitted or empty, no notifications are sent;
+# `check` still prints offenders and exits 2 for cron use.
+[alerts]
+# Full ntfy URL (public server free tier shown; pick an unguessable topic name).
+# To self-host: run `ntfy serve` and point this at your own host.
+ntfy_topic = "https://ntfy.sh/eth-vstats-replace-with-random-secret"
+
+# How long to suppress repeat alerts for the same (validator, rule) pair.
+cooldown_minutes = 30
+
+# If more than this many *new* alerts fire in one `check` run, collapse them
+# into a single "VALIDATOR STORM" summary message.
+storm_threshold = 10
