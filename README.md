@@ -87,11 +87,11 @@ Cron should not invoke `uv run` (it pays the resolver/lock cost every minute). U
 
 ### Push notifications (ntfy)
 
-If you set `ntfy_topic` under `[alerts]` in `config.toml`, `check` will POST to that ntfy topic on every **new** alert transition (no spam — see dedup/storm below). Setup:
+If you set `ntfy_topic` under `alerts` in `config.yml`, `check` will POST to that ntfy topic on every **new** alert transition (no spam — see dedup/storm below). Setup:
 
 1. Install the **ntfy** app (Play Store, App Store, F-Droid) on your phone.
 2. In the app: Subscribe → enter an unguessable topic name (e.g. `eth-vstats-9f8e7d6c5b4a`). Anyone who knows the name can read messages, so treat it as a secret.
-3. Set `ntfy_topic = "https://ntfy.sh/<your-topic>"` in `config.toml`.
+3. Set `ntfy_topic: "https://ntfy.sh/<your-topic>"` under `alerts:` in `config.yml`.
 4. Run `eth-validator-stats check`. The first time an alert fires you'll get a push.
 
 The public `ntfy.sh` server is free and Apache-2.0 open source. If you'd rather self-host, run `ntfy serve` on your beacon-node box and set `ntfy_topic` to `http://your-host:80/your-topic`.
@@ -113,7 +113,7 @@ The state file in `~/.local/share/eth-validator-stats/state.json` builds up a pe
 |---|---|---|
 | `BEACON_NODE_URL` | `http://localhost:3500` | Beacon node HTTP endpoint. Wins over the `beacon_node_url` field in config. |
 | `BEACON_NODE_AUTH_TOKEN` | (none) | Optional Bearer token for hosted providers / proxied nodes. Wins over `beacon_auth_token` in config. |
-| `ETH_VALIDATOR_STATS_CONFIG` | `$XDG_CONFIG_HOME/eth-validator-stats/config.toml` | Override config path. |
+| `ETH_VALIDATOR_STATS_CONFIG` | `$XDG_CONFIG_HOME/eth-validator-stats/config.yml` | Override config path. |
 | `ETH_VALIDATOR_STATS_STATE` | `$XDG_DATA_HOME/eth-validator-stats/state.json` | Override state file path. |
 
 ## Diagnosing a new node
@@ -143,7 +143,7 @@ Liveness answers "the validator was seen in the epoch", which is what most users
 - No watch / live TUI mode.
 - No proposer-duty tracking.
 - No historical query command.
-- No `validators add/list/rm` CRUD — edit the TOML directly.
+- No `validators add/list/rm` CRUD — edit the YAML directly.
 
 See the plan file in `.claude/plans/` (or the v2 backlog at the bottom of it) for what's next.
 

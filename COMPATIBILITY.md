@@ -12,7 +12,7 @@
 | Nimbus    | `http://localhost:5052`         | `--rest --rest-address=0.0.0.0 --rest-port=5052`                           |
 | Lodestar  | `http://localhost:9596`         | `--rest --rest.address=0.0.0.0 --rest.port=9596`                           |
 
-Set `beacon_node_url` in `config.toml` (or `BEACON_NODE_URL` env var) accordingly.
+Set `beacon_node_url` in `config.yml` (or `BEACON_NODE_URL` env var) accordingly.
 
 ## Endpoints used
 
@@ -29,7 +29,7 @@ Set `beacon_node_url` in `config.toml` (or `BEACON_NODE_URL` env var) accordingl
 
 If your node sits behind a reverse proxy or hosted RPC service that requires a Bearer token, set either:
 
-- `beacon_auth_token = "..."` in `config.toml`, or
+- `beacon_auth_token: "..."` in `config.yml`, or
 - `BEACON_NODE_AUTH_TOKEN=...` env var (wins over config).
 
 Hosted providers known to need this: Infura, Alchemy, QuickNode, BloXroute. Self-hosted Prysm/Lighthouse/etc. usually don't need it on the loopback interface.
