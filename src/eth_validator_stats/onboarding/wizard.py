@@ -46,6 +46,18 @@ def _default_notifier_factory(topic_url: str):
     return NtfyNotifier(topic_url)
 
 
+def _render_qr_for_terminal(url: str) -> str:
+    """Return an ASCII/block-character QR code for `url`, or empty string on failure."""
+    try:
+        import io as _io
+        import segno
+        buf = _io.StringIO()
+        segno.make(url, micro=False).terminal(out=buf, border=1)
+        return buf.getvalue()
+    except Exception:
+        return ""
+
+
 def run_wizard(
     args: WizardArgs,
     *,
@@ -198,6 +210,17 @@ def _step_ntfy(
         chosen = prompt(io, "Topic name", default=suggested)
         topic = chosen
     topic_url = topic if topic.startswith("http") else f"https://ntfy.sh/{topic}"
+
+    qr_text = _render_qr_for_terminal(topic_url)
+    if qr_text:
+        io.write("\n  Scan this QR with your phone camera (or the ntfy app's scanner)\n")
+        io.write("  to subscribe — no typing required:\n\n")
+        io.write(qr_text)
+        io.write(f"\n  Topic URL (if scanning isn't an option): {topic_url}\n\n")
+    else:
+        io.write(f"\n  Topic URL: {topic_url}\n")
+        io.write("  Open the ntfy app on your phone and subscribe to this topic.\n\n")
+
     io.write(f"Sending test message to {topic_url}\n")
     notifier = notifier_factory(topic_url)
     notifier.send(

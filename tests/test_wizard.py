@@ -69,6 +69,12 @@ def test_wizard_happy_path_writes_expected_yaml(
     assert len(notifier.sent) == 1
     assert "test" in notifier.sent[0][1].lower() or "welcome" in notifier.sent[0][1].lower()
 
+    # QR code is rendered so users don't have to type the topic name on mobile
+    written = "".join(prompts.written)
+    assert "Scan this QR" in written
+    assert "\x1b[7m" in written  # segno's terminal() uses ANSI reverse-video blocks
+    assert "https://ntfy.sh/eth-vstats-deadbeef" in written  # URL printed alongside as fallback
+
 
 def test_wizard_portscan_finds_nothing_falls_back_to_manual_url(tmp_path: Path, monkeypatch):
     from tests.conftest import FakeBeaconClient, FakeNotifier, FakePortscanResult, FakePrompts
