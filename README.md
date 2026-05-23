@@ -34,30 +34,34 @@ Or activate the venv directly (`source .venv/bin/activate`) and call `eth-valida
 
 ## Setup
 
-1. Make sure your beacon node's HTTP API is reachable. Prysm exposes it on `:3500` by default. Confirm:
-   ```bash
-   curl http://localhost:3500/eth/v1/beacon/headers/head
-   ```
+The fastest path is the onboarding wizard:
 
-2. Create a config file. Default location: `~/.config/eth-validator-stats/config.toml`.
+```bash
+uv run eth-validator-stats init
+```
 
-   ```bash
-   mkdir -p ~/.config/eth-validator-stats
-   cp config.toml.example ~/.config/eth-validator-stats/config.toml
-   $EDITOR ~/.config/eth-validator-stats/config.toml
-   ```
+It will:
+1. Ask where your beacon node lives, then auto-detect the client by probing the well-known ports (Prysm 3500, Lighthouse 5052, Teku 5051, Nimbus 5052, Lodestar 9596).
+2. Ask for one starter validator (pubkey or index), confirm it against the node.
+3. Optionally generate an ntfy topic and send a verification push to confirm the wire works end-to-end.
+4. Write `~/.config/eth-validator-stats/config.yml`.
 
-   Each validator entry takes either a `pubkey` (hex string) or an `index` (integer), with an optional `label`:
+Add more validators afterward by editing that YAML file directly.
 
-   ```toml
-   [[validators]]
-   pubkey = "0xb1d2..."
-   label  = "home-1"
+**Flag-driven (scriptable):**
+```bash
+uv run eth-validator-stats init --beacon-url http://localhost:3500 \
+    --validator 12345 --label home-1 \
+    --ntfy-topic eth-vstats-mysecret --yes
+```
 
-   [[validators]]
-   index = 12345
-   label  = "home-2"
-   ```
+**Already on a legacy `config.toml`?** Migrate:
+```bash
+uv run eth-validator-stats init --migrate
+```
+This converts to `config.yml` and renames the original to `config.toml.bak`.
+
+If you'd rather skip the wizard entirely, copy `config.yml.example` to `~/.config/eth-validator-stats/config.yml` and edit it.
 
 ## Usage
 

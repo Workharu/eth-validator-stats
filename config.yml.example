@@ -1,0 +1,29 @@
+# Copy to $XDG_CONFIG_HOME/eth-validator-stats/config.yml
+# (typically ~/.config/eth-validator-stats/config.yml)
+# Or let `eth-validator-stats init` create it for you.
+
+# Beacon node base URL: scheme + host + port only, NO API path.
+# Right: http://localhost:3500
+# Wrong: http://localhost:3500/eth/v1/beacon/headers/head
+# Env var BEACON_NODE_URL overrides this.
+# Default ports by client: Prysm 3500, Lighthouse 5052, Teku 5051,
+# Nimbus 5052, Lodestar 9596. See COMPATIBILITY.md.
+beacon_node_url: http://localhost:3500
+
+# Optional Bearer token (Infura/Alchemy/QuickNode, or any proxied node).
+# Env BEACON_NODE_AUTH_TOKEN wins over this.
+# beacon_auth_token: your-bearer-token-here
+
+# One entry per validator. Identify by pubkey OR index. Label is optional.
+validators:
+  - pubkey: "0xb1d2a4b9c5b4f1e6a8b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0"
+    label: home-1
+  - index: 12345
+    label: home-2
+
+# Optional. If `ntfy_topic` is missing or blank, no push notifications fire;
+# `check` still prints offenders and exits 2 for cron use.
+alerts:
+  ntfy_topic: https://ntfy.sh/eth-vstats-replace-with-random-secret
+  cooldown_minutes: 30
+  storm_threshold: 10

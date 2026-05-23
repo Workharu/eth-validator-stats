@@ -63,6 +63,11 @@ When a Beacon API spec revision lands or a major client release ships:
 
 Help wanted: PRs adding rows to this table after running `eth-validator-stats info` against the corresponding client.
 
+The wizard's port scan tries http first, then https once if nothing responds. Non-default ports (anything outside 3500/5052/5051/9596) require either:
+
+- `eth-validator-stats init --beacon-url http://your-host:PORT` (skip scan), or
+- editing the generated `config.yml` after running the wizard.
+
 ## Known limitations
 
 - **Liveness vs. on-chain inclusion.** The liveness endpoint reports whether the node *saw* the validator over gossip in a given epoch, which is close to "did it attest" but not identical to "the attestation was included on-chain with correct head/target". The latter requires `POST /eth/v1/beacon/rewards/attestations/{epoch}` against a finalized epoch — planned as a v2 enhancement.
