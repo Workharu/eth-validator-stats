@@ -62,3 +62,33 @@ def test_overwrite_does_not_leak_old_content(tmp_path: Path):
     assert loaded.beacon_node_url == "http://other:5052"
     assert len(loaded.validators) == 1
     assert loaded.validators[0].index == 99
+
+
+def test_loads_legacy_toml_with_deprecation_hint(tmp_path: Path, capsys, monkeypatch):
+    cfg_dir = tmp_path / "eth-validator-stats"
+    cfg_dir.mkdir()
+    toml_path = cfg_dir / "config.toml"
+    toml_path.write_text(
+        'beacon_node_url = "http://localhost:3500"\n'
+        '[[validators]]\n'
+        'index = 12345\n'
+        'label = "v1"\n'
+    )
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
+    monkeypatch.delenv("BEACON_NODE_URL", raising=False)
+    monkeypatch.delenv("BEACON_NODE_AUTH_TOKEN", raising=False)
+
+    cfg = load_config()
+    err = capsys.readouterr().err
+    assert cfg.validators[0].index == 12345
+    assert "config.toml" in err and "deprecated" in err
+
+
+def test_explicit_toml_path_does_not_print_deprecation(tmp_path: Path, capsys):
+    toml_path = tmp_path / "explicit.toml"
+    toml_path.write_text('beacon_node_url = "http://x:1"\n[[validators]]\nindex = 1\n')
+    cfg = load_config(toml_path)
+    err = capsys.readouterr().err
+    assert cfg.validators[0].index == 1
+    assert "deprecated" not in err

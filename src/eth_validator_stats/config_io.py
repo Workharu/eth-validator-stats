@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,7 +47,15 @@ def legacy_toml_path() -> Path:
 
 def load_config(path: Path | None = None) -> AppConfig:
     """Load a YAML or TOML config. Path is auto-resolved if None."""
-    p = path or _resolve_existing_config()
+    if path is None:
+        p, is_legacy_auto = _resolve_existing_config()
+        if is_legacy_auto:
+            sys.stderr.write(
+                f"note: {p} is supported but deprecated. "
+                f"Run 'eth-validator-stats init --migrate' to convert.\n"
+            )
+    else:
+        p = path
     if not p.exists():
         raise SystemExit(
             f"config file not found at {p}\n"
@@ -91,15 +100,17 @@ def write_config(cfg: AppConfig, path: Path) -> None:
     tmp.replace(path)
 
 
-def _resolve_existing_config() -> Path:
-    """Pick the right existing config file; default to YAML path if none exist."""
+def _resolve_existing_config() -> tuple[Path, bool]:
+    """Pick the right existing config file.
+    Returns (path, is_legacy_auto_resolved).
+    """
     yml = config_path()
     if yml.exists():
-        return yml
+        return (yml, False)
     legacy = legacy_toml_path()
     if legacy.exists():
-        return legacy
-    return yml  # default for the not-found error message
+        return (legacy, True)
+    return (yml, False)
 
 
 def _parse_config(raw: dict) -> AppConfig:
