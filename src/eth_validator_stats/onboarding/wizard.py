@@ -75,10 +75,11 @@ def run_wizard(
 
     # Step 1 — Beacon node URL (may skip portscan entirely if --beacon-url given)
     if args.beacon_url:
+        version = _probe_node_version(args.beacon_url, beacon_client_factory, io)
         beacon_url = args.beacon_url
     else:
         portscan_fn = portscan_fn or default_scan
-        beacon_url, _ = _step_beacon_url(args, io, portscan_fn)
+        beacon_url, _ = _step_beacon_url(args, io, portscan_fn, beacon_client_factory)
 
     # Step 2 — Optional auth
     auth_token = _step_auth(args, io)
@@ -113,9 +114,25 @@ def run_wizard(
     return 0
 
 
-def _step_beacon_url(args: WizardArgs, io: IOLike, portscan_fn: PortscanFn) -> tuple[str, str]:
+def _probe_node_version(url: str, beacon_factory: "BeaconFactory", io: IOLike) -> str:
+    """Probe /eth/v1/node/version on a beacon URL. Print result. On failure, offer save-anyway."""
+    io.write(f"  Probing {url}/eth/v1/node/version ...\n")
+    try:
+        with beacon_factory(url, auth_token=None) as client:
+            version = client.get_node_version().version
+        io.write(f"  ✓ Connected: {version}\n")
+        return version
+    except Exception as e:
+        io.write(f"  ✗ Could not reach beacon node: {type(e).__name__}: {e}\n")
+        if confirm(io, "Save this URL anyway and continue?", default=False):
+            return ""
+        raise SystemExit(f"beacon node not reachable at {url}")
+
+
+def _step_beacon_url(args: WizardArgs, io: IOLike, portscan_fn: PortscanFn, beacon_factory: "BeaconFactory") -> tuple[str, str]:
     if args.beacon_url:
-        return (args.beacon_url, "")
+        version = _probe_node_version(args.beacon_url, beacon_factory, io)
+        return (args.beacon_url, version)
     host = args.host or prompt(io, "Where is your beacon node running?", default="localhost")
     io.write(f"Scanning {host}... (3500, 5052, 5051, 9596 in parallel)\n")
     found = asyncio.run(portscan_fn(host))
@@ -134,7 +151,8 @@ def _step_beacon_url(args: WizardArgs, io: IOLike, portscan_fn: PortscanFn) -> t
         manual = prompt(io, "Beacon node URL", default=None)
         if not manual:
             raise SystemExit("no beacon URL provided")
-        return (manual, "")
+        version = _probe_node_version(manual, beacon_factory, io)
+        return (manual, version)
     for f in found:
         io.write(f"  ✓ Found {f.client_version} at {f.url}\n")
     if len(found) == 1:

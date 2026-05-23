@@ -120,6 +120,52 @@ def test_wizard_portscan_finds_nothing_falls_back_to_manual_url(tmp_path: Path, 
     assert "http://localhost:24010" in written
     assert "/eth/v1/node/version" in written
     assert "curl" in written
+    # And after they paste the URL, the wizard probes it and reports the client/version
+    assert "Probing http://192.168.10.15:24010/eth/v1/node/version" in written
+    assert "✓ Connected: FakeBeacon/v1.0" in written
+
+
+def test_wizard_manual_url_probe_failure_offers_save_anyway(tmp_path: Path, monkeypatch):
+    """When the manually-entered URL can't be reached, the wizard reports the
+    error and asks whether to save it anyway (yes → continue; no → abort)."""
+    from tests.conftest import FakeBeaconClient, FakeNotifier, FakePortscanResult, FakePrompts
+
+    cfg_path = tmp_path / "config.yml"
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
+    monkeypatch.delenv("BEACON_NODE_URL", raising=False)
+    monkeypatch.delenv("BEACON_NODE_AUTH_TOKEN", raising=False)
+
+    prompts = FakePrompts(answers=[
+        "weird-host",                          # host
+        "http://does-not-resolve:9999",        # manual URL
+        "y",                                   # save anyway
+        "",                                    # no auth (default n)
+        "1",                                   # validator id
+        "v1",                                  # label
+        "n",                                   # disable ntfy
+    ])
+    portscan = FakePortscanResult(found=[])
+    beacon = FakeBeaconClient(
+        validators=[ValidatorInfo(index=1, pubkey="0xaaa", status="active_ongoing", balance_gwei=32_000_000_000)],
+        raise_on_version=ConnectionError("Name or service not known"),
+    )
+    notifier = FakeNotifier()
+
+    args = WizardArgs(host=None, beacon_url=None, auth_token=None,
+                      validator=None, label=None,
+                      ntfy_topic=None, no_ntfy=False, yes=False, force=False)
+    rc = run_wizard(
+        args, cfg_path=cfg_path, io=prompts,
+        portscan_fn=portscan,
+        beacon_client_factory=lambda url, auth_token=None: beacon,
+        notifier_factory=lambda topic: notifier,
+    )
+    assert rc == 0
+    written = "".join(prompts.written)
+    assert "✗ Could not reach beacon node" in written
+    assert "Name or service not known" in written
+    loaded = load_config(cfg_path)
+    assert loaded.beacon_node_url == "http://does-not-resolve:9999"
 
 
 def test_wizard_multiple_ports_respond_triggers_selection_prompt(tmp_path: Path, monkeypatch):

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from eth_validator_stats.beacon import ValidatorInfo
+from eth_validator_stats.beacon import NodeVersion, ValidatorInfo
 from eth_validator_stats.onboarding.portscan import Found
 
 
@@ -36,9 +36,18 @@ class FakePortscanResult:
 class FakeBeaconClient:
     """Stand-in for BeaconClient with scriptable validator results."""
 
-    def __init__(self, validators: list[ValidatorInfo], *, raise_on_call: Exception | None = None):
+    def __init__(
+        self,
+        validators: list[ValidatorInfo],
+        *,
+        raise_on_call: Exception | None = None,
+        version: str = "FakeBeacon/v1.0",
+        raise_on_version: Exception | None = None,
+    ):
         self._validators = validators
         self._raise = raise_on_call
+        self._version = version
+        self._raise_on_version = raise_on_version
         self.calls: list[list[str]] = []
 
     def __enter__(self):
@@ -52,6 +61,11 @@ class FakeBeaconClient:
         if self._raise:
             raise self._raise
         return list(self._validators)
+
+    def get_node_version(self) -> NodeVersion:
+        if self._raise_on_version:
+            raise self._raise_on_version
+        return NodeVersion(version=self._version)
 
 
 class FakeNotifier:
