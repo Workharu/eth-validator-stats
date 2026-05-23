@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import yaml
+
 from .alerts import AlertsConfig
 
 DEFAULT_BEACON_URL = "http://localhost:3500"
@@ -40,3 +42,98 @@ def legacy_toml_path() -> Path:
     """Resolve the legacy TOML config path (used for migration / deprecation)."""
     base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
     return Path(base) / "eth-validator-stats" / LEGACY_CONFIG_FILENAME
+
+
+def load_config(path: Path | None = None) -> AppConfig:
+    """Load a YAML or TOML config. Path is auto-resolved if None."""
+    p = path or _resolve_existing_config()
+    if not p.exists():
+        raise SystemExit(
+            f"config file not found at {p}\n"
+            f"Run 'eth-validator-stats init' to create one."
+        )
+    if p.suffix in (".yml", ".yaml"):
+        raw = yaml.safe_load(p.read_text()) or {}
+    elif p.suffix == ".toml":
+        import tomllib
+        raw = tomllib.loads(p.read_text())
+    else:
+        raise SystemExit(f"unsupported config suffix: {p.suffix}")
+    return _parse_config(raw)
+
+
+def write_config(cfg: AppConfig, path: Path) -> None:
+    """Write a YAML config atomically with 0o600 permissions."""
+    data: dict = {
+        "beacon_node_url": cfg.beacon_node_url,
+    }
+    if cfg.beacon_auth_token:
+        data["beacon_auth_token"] = cfg.beacon_auth_token
+    data["validators"] = []
+    for v in cfg.validators:
+        entry: dict = {}
+        if v.pubkey is not None:
+            entry["pubkey"] = v.pubkey
+        elif v.index is not None:
+            entry["index"] = v.index
+        if v.label:
+            entry["label"] = v.label
+        data["validators"].append(entry)
+    data["alerts"] = {
+        "ntfy_topic": cfg.alerts.ntfy_topic,
+        "cooldown_minutes": cfg.alerts.cooldown_minutes,
+        "storm_threshold": cfg.alerts.storm_threshold,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False))
+    os.chmod(tmp, 0o600)
+    tmp.replace(path)
+
+
+def _resolve_existing_config() -> Path:
+    """Pick the right existing config file; default to YAML path if none exist."""
+    yml = config_path()
+    if yml.exists():
+        return yml
+    legacy = legacy_toml_path()
+    if legacy.exists():
+        return legacy
+    return yml  # default for the not-found error message
+
+
+def _parse_config(raw: dict) -> AppConfig:
+    url = os.environ.get("BEACON_NODE_URL") or raw.get("beacon_node_url") or DEFAULT_BEACON_URL
+    auth_token = os.environ.get("BEACON_NODE_AUTH_TOKEN") or str(raw.get("beacon_auth_token", "") or "")
+    entries: list[ConfigEntry] = []
+    for v in raw.get("validators", []) or []:
+        pubkey = v.get("pubkey")
+        index = v.get("index")
+        if pubkey is None and index is None:
+            raise SystemExit(f"config entry missing both pubkey and index: {v!r}")
+        if pubkey is not None:
+            ident = pubkey
+        else:
+            ident = str(int(index))
+        entries.append(
+            ConfigEntry(
+                identifier=ident,
+                label=v.get("label", ""),
+                pubkey=pubkey,
+                index=int(index) if index is not None else None,
+            )
+        )
+    if not entries:
+        raise SystemExit("config has no validators entries")
+    alerts_raw = raw.get("alerts", {}) or {}
+    alerts = AlertsConfig(
+        ntfy_topic=str(alerts_raw.get("ntfy_topic", "") or ""),
+        cooldown_minutes=int(alerts_raw.get("cooldown_minutes", 30)),
+        storm_threshold=int(alerts_raw.get("storm_threshold", 10)),
+    )
+    return AppConfig(
+        beacon_node_url=url,
+        validators=entries,
+        beacon_auth_token=auth_token,
+        alerts=alerts,
+    )
