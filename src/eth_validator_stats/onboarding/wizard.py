@@ -52,7 +52,7 @@ def _render_qr_for_terminal(url: str) -> str:
         import io as _io
         import segno
         buf = _io.StringIO()
-        segno.make(url, micro=False).terminal(out=buf, border=1)
+        segno.make(url, micro=False).terminal(out=buf, border=1, compact=True)
         return buf.getvalue()
     except Exception:
         return ""

@@ -72,7 +72,8 @@ def test_wizard_happy_path_writes_expected_yaml(
     # QR code is rendered so users don't have to type the topic name on mobile
     written = "".join(prompts.written)
     assert "Scan this QR" in written
-    assert "\x1b[7m" in written  # segno's terminal() uses ANSI reverse-video blocks
+    # segno compact mode uses half-block characters
+    assert any(ch in written for ch in ("█", "▀", "▄"))
     assert "https://ntfy.sh/eth-vstats-deadbeef" in written  # URL printed alongside as fallback
 
 
