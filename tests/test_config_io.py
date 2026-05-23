@@ -92,3 +92,15 @@ def test_explicit_toml_path_does_not_print_deprecation(tmp_path: Path, capsys):
     err = capsys.readouterr().err
     assert cfg.validators[0].index == 1
     assert "deprecated" not in err
+
+
+def test_yaml_load_rejects_python_object_tag(tmp_path: Path):
+    """A malicious YAML with !!python/object must not deserialize into Python objects."""
+    p = tmp_path / "bad.yml"
+    p.write_text(
+        "beacon_node_url: !!python/object/apply:os.system ['echo PWNED']\n"
+        "validators:\n"
+        "  - index: 1\n"
+    )
+    with pytest.raises(Exception):  # YAMLError or ConstructorError — both acceptable
+        load_config(p)
