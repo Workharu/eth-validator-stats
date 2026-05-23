@@ -5,8 +5,6 @@ import json
 import os
 import sys
 import time
-import tomllib
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import httpx
@@ -20,35 +18,11 @@ from .alerts import (
     process_validator_alerts,
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
+from .config_io import AppConfig, ConfigEntry, config_path, load_config
 from .render import DisplayRow, build_table
 
-DEFAULT_BEACON_URL = "http://localhost:3500"
 LIVENESS_BUFFER_LEN = 10
 N_ATTS_DISPLAYED = 5
-
-
-@dataclass(frozen=True)
-class ConfigEntry:
-    identifier: str  # pubkey hex or decimal index, as a string the Beacon API accepts
-    label: str
-    pubkey: str | None
-    index: int | None
-
-
-@dataclass(frozen=True)
-class AppConfig:
-    beacon_node_url: str
-    validators: list[ConfigEntry]
-    beacon_auth_token: str = ""
-    alerts: AlertsConfig = field(default_factory=AlertsConfig)
-
-
-def config_path() -> Path:
-    override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
-    if override:
-        return Path(override)
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    return Path(base) / "eth-validator-stats" / "config.toml"
 
 
 def state_path() -> Path:
@@ -57,49 +31,6 @@ def state_path() -> Path:
         return Path(override)
     base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
     return Path(base) / "eth-validator-stats" / "state.json"
-
-
-def load_config(path: Path) -> AppConfig:
-    if not path.exists():
-        raise SystemExit(
-            f"config file not found at {path}\n"
-            "Copy config.toml.example to that path, then edit it."
-        )
-    raw = tomllib.loads(path.read_text())
-    url = os.environ.get("BEACON_NODE_URL") or raw.get("beacon_node_url") or DEFAULT_BEACON_URL
-    auth_token = os.environ.get("BEACON_NODE_AUTH_TOKEN") or str(raw.get("beacon_auth_token", "") or "")
-    entries: list[ConfigEntry] = []
-    for v in raw.get("validators", []):
-        pubkey = v.get("pubkey")
-        index = v.get("index")
-        if pubkey is None and index is None:
-            raise SystemExit(f"config entry missing both pubkey and index: {v!r}")
-        if pubkey is not None:
-            ident = pubkey
-        else:
-            ident = str(int(index))
-        entries.append(
-            ConfigEntry(
-                identifier=ident,
-                label=v.get("label", ""),
-                pubkey=pubkey,
-                index=int(index) if index is not None else None,
-            )
-        )
-    if not entries:
-        raise SystemExit("config has no [[validators]] entries")
-    alerts_raw = raw.get("alerts", {}) or {}
-    alerts = AlertsConfig(
-        ntfy_topic=str(alerts_raw.get("ntfy_topic", "") or ""),
-        cooldown_minutes=int(alerts_raw.get("cooldown_minutes", 30)),
-        storm_threshold=int(alerts_raw.get("storm_threshold", 10)),
-    )
-    return AppConfig(
-        beacon_node_url=url,
-        validators=entries,
-        beacon_auth_token=auth_token,
-        alerts=alerts,
-    )
 
 
 def load_state(path: Path) -> dict:
