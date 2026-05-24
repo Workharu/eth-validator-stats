@@ -27,3 +27,15 @@ alerts:
   ntfy_topic: https://ntfy.sh/eth-vstats-replace-with-random-secret
   cooldown_minutes: 30
   storm_threshold: 10
+
+  # Notify after this many consecutive missed attestations.
+  # CLI flag `--missed N` overrides this at invocation time.
+  missed_attestations_threshold: 2
+
+  # Ignore withdrawals smaller than this many gwei (0.001 ETH default).
+  # Prevents dust from triggering alerts; real withdrawals are normally >>this.
+  withdrawal_threshold_gwei: 1000000
+
+  # How far ahead to pre-notify about an upcoming block proposal.
+  # 1 epoch ≈ 6.4 min on mainnet. Set to 0 to disable upcoming-proposal alerts.
+  proposal_lookahead_epochs: 1
