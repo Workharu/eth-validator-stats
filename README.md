@@ -29,7 +29,7 @@ Pre-built `.deb` and `.rpm` packages (both `amd64`/`x86_64` and `arm64`/`aarch64
 
 ```bash
 # No system Python prerequisite — the package bundles its own.
-sudo apt install -y ./eth-validator-stats_0.3.2-1_amd64.deb     # or _arm64.deb
+sudo apt install -y ./eth-validator-stats_0.3.3-1_amd64.deb     # or _arm64.deb
 sudo eth-validator-stats init --system
 sudo systemctl start eth-validator-stats
 ```
@@ -40,7 +40,7 @@ sudo systemctl start eth-validator-stats
 **Fedora / RHEL / Rocky / Alma 9+:**
 
 ```bash
-sudo dnf install ./eth-validator-stats-0.3.2-1.fc40.x86_64.rpm     # or .aarch64.rpm
+sudo dnf install ./eth-validator-stats-0.3.3-1.fc40.x86_64.rpm     # or .aarch64.rpm
 sudo eth-validator-stats init --system
 sudo systemctl start eth-validator-stats
 ```

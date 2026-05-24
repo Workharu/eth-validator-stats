@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.2
+Version:        0.3.3
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -193,6 +193,9 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.3-1
+- Small changes : release notes for 0.3.3 
+
 * Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.2-1
 - Internal: scripts/bump.sh helper to sync version across pyproject.toml,
   the rpm spec, debian/changelog, README install snippets, and uv.lock,

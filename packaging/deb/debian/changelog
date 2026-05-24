@@ -1,3 +1,9 @@
+eth-validator-stats (0.3.3-1) unstable; urgency=medium
+
+  * Just another test for new version: release notes for 0.3.3
+
+ -- privatejava <privatejava@yahoo.com>  Sun, 24 May 2026 19:44:28 +0000
+
 eth-validator-stats (0.3.2-1) unstable; urgency=medium
 
   * Internal: scripts/bump.sh helper to sync version across pyproject.toml,
