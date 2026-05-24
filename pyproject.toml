@@ -44,6 +44,9 @@ dev = [
 
 [project.scripts]
 eth-validator-stats = "eth_validator_stats.cli:main"
+# Short alias for muscle-memory comfort. Identical behavior to the
+# canonical `eth-validator-stats` binary.
+evs = "eth_validator_stats.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eth_validator_stats"]

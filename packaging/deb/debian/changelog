@@ -1,8 +1,20 @@
 eth-validator-stats (0.3.3-1) unstable; urgency=medium
 
-  * Just another test for new version: release notes for 0.3.3
+  * Fix: `eth-validator-stats status` (and `check`, `info`, `simulate`)
+    now find `/etc/eth-validator-stats/config.yml` written by
+    `init --system` or the .deb post-install. Previously they only
+    checked `~/.config/eth-validator-stats/config.yml` and erred out
+    on system installs unless the systemd service was used. Resolver
+    order is now: $ETH_VALIDATOR_STATS_CONFIG -> /etc -> ~/.config.
+  * New: short CLI alias `evs` (3 chars). Same binary as
+    `eth-validator-stats`, just easier to type.
+  * Docs: substantial README polish for onboarding — pick-your-install
+    table at the top of the Install section, example `status` output,
+    per-install cron path table, simulate-subcommand visibility,
+    accurate "what it does NOT do" list, removed stale legacy TOML
+    migration section.
 
- -- privatejava <privatejava@yahoo.com>  Sun, 24 May 2026 19:44:28 +0000
+ -- privatejava <privatejava@yahoo.com>  Sun, 24 May 2026 20:00:00 +0000
 
 eth-validator-stats (0.3.2-1) unstable; urgency=medium
 

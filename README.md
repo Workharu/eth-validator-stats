@@ -19,6 +19,8 @@ eth-validator-stats info                  # probe beacon node: client/version + 
 eth-validator-stats simulate <event>      # fire a test ntfy push (no real outage needed)
 ```
 
+> **Short alias:** every command also responds to `evs`. So `evs status`, `evs check --missed 3`, `evs simulate missed-attestation`, etc. Identical behavior — just three characters to type. The long form remains canonical in scripts, systemd units, and these docs.
+
 Works with any client that implements the standard Ethereum Beacon API — Prysm, Lighthouse, Teku, Nimbus, Lodestar. See [COMPATIBILITY.md](COMPATIBILITY.md).
 
 **What `status` looks like:**

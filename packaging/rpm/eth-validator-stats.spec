@@ -194,7 +194,17 @@ fi
 
 %changelog
 * Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.3-1
-- Small changes : release notes for 0.3.3 
+- Fix: status / check / info / simulate now find /etc/<pkg>/config.yml
+  written by `init --system` or the .rpm post-install. Previously they
+  only checked ~/.config and erred out on system installs unless the
+  systemd service was used. Resolver order is now:
+  $ETH_VALIDATOR_STATS_CONFIG -> /etc -> ~/.config.
+- New: short CLI alias `evs` (3 chars). Same binary as
+  eth-validator-stats, just easier to type.
+- Docs: substantial README polish for onboarding (pick-your-install
+  table, example status output, per-install cron path table,
+  simulate-subcommand visibility, accurate "what it does NOT do" list,
+  removed stale legacy TOML migration section).
 
 * Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.2-1
 - Internal: scripts/bump.sh helper to sync version across pyproject.toml,
