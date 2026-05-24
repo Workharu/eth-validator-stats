@@ -1,0 +1,12 @@
+<service>
+  <id>eth-validator-stats</id>
+  <name>eth-validator-stats</name>
+  <description>Ethereum validator stats watcher (long-running service mode).</description>
+  <executable>@INSTALL_DIR@\.venv\Scripts\eth-validator-stats.exe</executable>
+  <arguments>watch</arguments>
+  <onfailure action="restart" delay="10 sec"/>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+</service>
