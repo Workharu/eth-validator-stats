@@ -13,6 +13,7 @@ dependencies = [
     "rich>=13.0",
     "pyyaml>=6.0",
     "segno>=1.6",
+    "platformdirs>=4.0",
 ]
 
 [dependency-groups]
