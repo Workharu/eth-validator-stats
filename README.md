@@ -17,43 +17,24 @@ Shows: validator index, label, status, balance (ETH), and the last 5 attestation
 
 ## Install
 
-**Debian 12 (Bookworm):**
-
-`python3.11` ships as the default `python3` — no extra repo needed.
+**Debian / Ubuntu (any version supported by Debian 12 or Ubuntu 22.04+):**
 
 ```bash
-sudo apt install -y python3.11-venv
-sudo apt install -y ./eth-validator-stats_0.2.1-1_all.deb
+# No system Python prerequisite — the package bundles its own.
+sudo apt install -y ./eth-validator-stats_0.3.0-1_amd64.deb     # or _arm64.deb
 sudo eth-validator-stats init --system
-sudo systemctl status eth-validator-stats
+sudo systemctl start eth-validator-stats
 ```
 
-**Ubuntu 22.04 / 24.04:**
+> Use `apt install ./path.deb` (not `dpkg -i`) so apt resolves the few
+> remaining dependencies (e.g. `adduser`) automatically.
 
-`python3.11` isn't in the default Ubuntu repos, so install it from the
-[deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) first:
-
-```bash
-sudo add-apt-repository -y ppa:deadsnakes/ppa
-sudo apt update
-sudo apt install -y python3.11 python3.11-venv
-sudo apt install -y ./eth-validator-stats_0.2.1-1_all.deb
-sudo eth-validator-stats init --system
-sudo systemctl status eth-validator-stats
-```
-
-> **Important:** use `apt install ./path.deb` (not `dpkg -i`) so apt
-> auto-resolves the python3.11 dependency. If you already ran `dpkg -i`
-> and got a "dependency problems" error, run `sudo apt --fix-broken install`
-> after the PPA steps above to recover.
-
-**Fedora 40 / RHEL 9 / Rocky 9 / Alma 9 (or newer):**
+**Fedora / RHEL / Rocky / Alma 9+:**
 
 ```bash
-sudo dnf install -y python3.11
-sudo dnf install ./eth-validator-stats-0.2.1-1.fc40.x86_64.rpm
+sudo dnf install ./eth-validator-stats-0.3.0-1.fc40.x86_64.rpm     # or .aarch64.rpm
 sudo eth-validator-stats init --system
-sudo systemctl start eth-validator-stats   # Fedora policy: doesn't auto-start
+sudo systemctl start eth-validator-stats
 ```
 
 **Any OS with Python 3.11+ (PyPI):**
@@ -63,7 +44,23 @@ pipx install eth-validator-stats
 eth-validator-stats init        # per-user config at ~/.config/eth-validator-stats/
 ```
 
-`pipx` creates an isolated venv automatically. Plain `pip install` also works inside your own venv.
+To run as a daemon after a pipx install, use the built-in service installer
+(does the same registration the `.deb`/`.rpm` postinst does, but for the
+pipx-installed binary):
+
+```bash
+sudo eth-validator-stats install-service       # one-time daemon registration
+sudo eth-validator-stats init --system         # populate config
+sudo systemctl start eth-validator-stats
+```
+
+Pass `--user` to register a `systemctl --user` unit instead of a system-scope
+one (no sudo required). To remove:
+
+```bash
+sudo eth-validator-stats uninstall-service              # leaves /etc and /var/lib alone
+sudo eth-validator-stats uninstall-service --purge      # also deletes config + state
+```
 
 ## Develop locally
 
