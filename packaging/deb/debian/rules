@@ -33,13 +33,15 @@ override_dh_auto_install:
 	rm -f $(VENV)/bin/activate $(VENV)/bin/activate.csh \
 	      $(VENV)/bin/activate.fish $(VENV)/bin/activate.nu \
 	      $(VENV)/bin/activate.ps1
-	# Strip caches to keep the package small (and remove any .pyc that
-	# binary-encodes the buildroot path).
-	find $(VENV) -type d -name '__pycache__' -prune -exec rm -rf {} +
-	find $(VENV) -name '*.pyc' -delete
-	# Rewrite the buildroot path out of every TEXT file in the venv (shebangs,
-	# pyvenv.cfg, pip-bootstrap script bodies). grep -I skips binaries.
-	grep -rlI "$(CURDIR)/$(DESTDIR)" $(VENV) 2>/dev/null \
+	# Strip caches across the whole bundled tree (.pyc files binary-encode
+	# the buildroot path; clearing them avoids stale paths in shipped .pyc).
+	find $(DESTDIR)/opt/eth-validator-stats -type d -name '__pycache__' -prune -exec rm -rf {} +
+	find $(DESTDIR)/opt/eth-validator-stats -name '*.pyc' -delete
+	# Rewrite the buildroot path out of every TEXT file in the bundled tree.
+	# Walk the whole /opt/eth-validator-stats (both venv AND the
+	# python-build-standalone base interpreter) — _sysconfigdata*.py in the
+	# PBS tree otherwise carries the buildroot path. grep -I skips binaries.
+	grep -rlI "$(CURDIR)/$(DESTDIR)" $(DESTDIR)/opt/eth-validator-stats 2>/dev/null \
 	    | xargs -r sed -i 's|$(CURDIR)/$(DESTDIR)||g'
 	# /usr/bin entrypoint symlink.
 	ln -sf /opt/eth-validator-stats/venv/bin/eth-validator-stats \

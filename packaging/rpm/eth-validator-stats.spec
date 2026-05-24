@@ -68,15 +68,17 @@ rm -f %{buildroot}/opt/%{name}/venv/bin/activate \
       %{buildroot}/opt/%{name}/venv/bin/activate.nu \
       %{buildroot}/opt/%{name}/venv/bin/activate.ps1
 
-# Strip __pycache__ / .pyc first (binary files containing buildroot paths
-# would otherwise survive the text-file rewrite below).
-find %{buildroot}/opt/%{name}/venv -type d -name '__pycache__' -prune -exec rm -rf {} +
-find %{buildroot}/opt/%{name}/venv -name '*.pyc' -delete
+# Strip __pycache__ / .pyc first across the whole bundled tree — they
+# binary-encode the buildroot path and would survive the text-file rewrite.
+find %{buildroot}/opt/%{name} -type d -name '__pycache__' -prune -exec rm -rf {} +
+find %{buildroot}/opt/%{name} -name '*.pyc' -delete
 
-# Rewrite the buildroot path out of every TEXT file in the venv. grep -I
-# excludes binaries (e.g. PyYAML's _yaml.so), so this is safe to run broadly.
-# Covers shebangs in bin/*, pyvenv.cfg, and pip-bootstrap script bodies.
-grep -rlI "%{buildroot}" %{buildroot}/opt/%{name}/venv 2>/dev/null \
+# Rewrite the buildroot path out of every TEXT file in the bundled tree.
+# Walk the whole /opt/%{name} (both venv AND the python-build-standalone
+# base interpreter) — _sysconfigdata*.py in the PBS tree otherwise carries
+# the buildroot path and trips %check-buildroot. grep -I excludes binaries
+# (e.g. PyYAML's _yaml.so) so this is safe to run broadly.
+grep -rlI "%{buildroot}" %{buildroot}/opt/%{name} 2>/dev/null \
     | xargs -r sed -i "s|%{buildroot}||g"
 
 # Symlink /usr/bin entrypoint.
