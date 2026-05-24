@@ -1,3 +1,18 @@
+eth-validator-stats (0.3.1-1) unstable; urgency=medium
+
+  * New `eth-validator-stats simulate <event>` subcommand fires a single
+    ntfy push using the exact title/body template real alerts produce.
+    Useful to verify the notification wire without waiting for a real
+    outage. Supports missed-attestation, offline, withdrawal,
+    proposing-soon, proposed, missed-proposal, blind, recovered.
+  * Packaging hardening so the .deb builds cleanly with debhelper 13:
+    skip dh_shlibdeps scanning of the bundled python-build-standalone
+    interpreter (its libpython3.so uses $ORIGIN-relative RPATH which
+    dpkg-shlibdeps cannot resolve), and rewrite buildroot paths in the
+    entire /opt/<pkg> tree.
+
+ -- Workharu <Workharu@users.noreply.github.com>  Sun, 24 May 2026 19:00:00 +0000
+
 eth-validator-stats (0.3.0-1) unstable; urgency=medium
 
   * Self-contained .deb: bundles python-build-standalone via uv, drops the

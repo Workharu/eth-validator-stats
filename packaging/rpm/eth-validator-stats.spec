@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.0
+Version:        0.3.1
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -193,6 +193,18 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.3.1-1
+- New `eth-validator-stats simulate <event>` subcommand fires a single ntfy
+  push using the exact title/body template real alerts produce. Useful to
+  verify the notification wire without waiting for a real outage. Supports
+  missed-attestation, offline, withdrawal, proposing-soon, proposed,
+  missed-proposal, blind, recovered.
+- Packaging hardening so the .rpm builds cleanly on Fedora 40+: disable
+  brp-check-rpaths and brp-mangle-shebangs (PBS bundle is sealed), rewrite
+  buildroot paths in the entire /opt/<pkg> tree (was only the venv before),
+  rewrite uv's stable-name symlink to be relative, and demote missing
+  build-id errors to warnings (PBS .so files don't carry build-ids).
+
 * Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.3.0-1
 - Self-contained .rpm: bundles python-build-standalone via uv, drops the
   runtime dependency on system python3.11.
