@@ -20,6 +20,12 @@
 # is purely cosmetic. Disable the policy for the sealed bundle.
 %global __brp_mangle_shebangs %{nil}
 
+# python-build-standalone ships its .so files without GNU build-id sections
+# (they are prebuilt; debug-link / build-id is not in PBS's pipeline). The
+# default Fedora policy turns this into a fatal "Missing build-id" error.
+# Demote it to a warning so the sealed bundle ships as-is.
+%global _missing_build_ids_terminate_build 0
+
 Name:           eth-validator-stats
 Version:        0.3.0
 Release:        1%{?dist}
@@ -69,6 +75,19 @@ mkdir -p %{buildroot}/opt/%{name} \
 # Bundle a self-contained python-build-standalone interpreter via uv.
 # This drops the runtime dependency on system python3.11.
 uv python install --install-dir %{buildroot}/opt/%{name}/python 3.11
+
+# `uv python install` creates a stable-name symlink alongside the versioned
+# interpreter dir, e.g.
+#   cpython-3.11-linux-x86_64-gnu -> <buildroot>/.../cpython-3.11.15-linux-x86_64-gnu
+# The target is an absolute path through BuildRoot, which RPM rejects with
+# "Symlink points to BuildRoot". Rewrite each such symlink to be a relative
+# sibling reference so it resolves correctly after install.
+for stable in %{buildroot}/opt/%{name}/python/cpython-*-linux-*-gnu; do
+    [ -L "$stable" ] || continue
+    target=$(basename "$(readlink "$stable")")
+    rm -f "$stable"
+    ln -s "$target" "$stable"
+done
 
 # Locate the installed interpreter and use it to build the venv.
 PBS_PYTHON=$(find %{buildroot}/opt/%{name}/python -type f -name python3.11 | head -n1)
