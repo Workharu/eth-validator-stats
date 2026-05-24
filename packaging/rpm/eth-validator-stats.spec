@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.1
+Version:        0.3.2
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -193,6 +193,16 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.2-1
+- Internal: scripts/bump.sh helper to sync version across pyproject.toml,
+  the rpm spec, debian/changelog, README install snippets, and uv.lock,
+  and to prepend stub changelog entries for the new release.
+- Internal: CI now runs `bump.sh --verify` on every push (via a dedicated
+  version-consistency job) and at release time across all release jobs,
+  so version drift across pinned files is caught before a tag is cut.
+- Docs: README install-snippet filenames updated (carried stale 0.3.0
+  values at the 0.3.1 release; corrected in a follow-up commit).
+
 * Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.3.1-1
 - New `eth-validator-stats simulate <event>` subcommand fires a single ntfy
   push using the exact title/body template real alerts produce. Useful to

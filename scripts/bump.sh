@@ -5,15 +5,19 @@
 #   scripts/bump.sh <new-version>   # bump to <new-version>
 #   scripts/bump.sh --verify        # check that all pinned files agree
 #
-# Bump mode updates: pyproject.toml, packaging/rpm/eth-validator-stats.spec
-#   (Version: field only), README.md (install-snippet filenames), uv.lock.
-#   Skips:   the %changelog section in the rpm spec and debian/changelog —
-#            those need a human-written release notes entry. The script
-#            reminds you afterwards.
+# Bump mode:
+#   Updates pyproject.toml, packaging/rpm/eth-validator-stats.spec (Version:
+#   field), README.md install-snippet filenames, and uv.lock. Also prepends
+#   a stub changelog entry to debian/changelog and to the rpm spec's
+#   %changelog section. The stub body is `TODO: release notes for <ver>` —
+#   edit it to your actual release notes before committing. The script
+#   uses your `git config user.name` / `user.email` for the entry author.
 #
-# Verify mode reads the version from each pinned file and exits 0 if they
-#   all agree, 1 with a mismatch report otherwise. CI runs this on every
-#   push (pre-release-check.yml) so drift is caught before tagging.
+# Verify mode:
+#   Reads the version from each pinned file (pyproject.toml, uv.lock, rpm
+#   spec Version:, debian/changelog top entry, README install snippets) and
+#   exits 0 if they all agree, 1 with a per-file table otherwise. CI runs
+#   this on every push so drift is caught before a tag is cut.
 
 set -euo pipefail
 
@@ -118,11 +122,21 @@ if [[ -n "$DIRTY" ]]; then
     exit 1
 fi
 
+# Resolve author identity for the changelog stub. Falls back to the same
+# value the existing changelog entries use so the format stays consistent
+# even on a machine where git config user.name is unset.
+AUTHOR_NAME=$(git config user.name 2>/dev/null || true)
+AUTHOR_EMAIL=$(git config user.email 2>/dev/null || true)
+: "${AUTHOR_NAME:=Workharu}"
+: "${AUTHOR_EMAIL:=Workharu@users.noreply.github.com}"
+
+DEB_DATE=$(date -u "+%a, %d %b %Y %H:%M:%S +0000")
+RPM_DATE=$(date -u "+%a %b %d %Y")
+
 # pyproject.toml — the version line at the [project] level.
 sed -i "s/^version = \"$CURRENT\"$/version = \"$NEW\"/" pyproject.toml
 
-# RPM spec Version: field. The %changelog history is intentionally left
-# alone — that's a release-notes entry the human writes.
+# RPM spec Version: field. The %changelog history is appended to below.
 sed -i "s/^Version:[[:space:]]*$CURRENT$/Version:        $NEW/" \
     packaging/rpm/eth-validator-stats.spec
 
@@ -131,21 +145,52 @@ sed -i "s/^Version:[[:space:]]*$CURRENT$/Version:        $NEW/" \
 sed -i "s/eth-validator-stats_${CURRENT}-1_/eth-validator-stats_${NEW}-1_/g" README.md
 sed -i "s/eth-validator-stats-${CURRENT}-1\\./eth-validator-stats-${NEW}-1./g" README.md
 
+# Prepend a stub entry to debian/changelog. The TODO body is a placeholder —
+# edit it before committing. Trailing newlines on the stub are deliberate
+# so the previous entry is properly separated.
+DEB_STUB="eth-validator-stats ($NEW-1) unstable; urgency=medium
+
+  * TODO: release notes for $NEW (edit me before committing)
+
+ -- $AUTHOR_NAME <$AUTHOR_EMAIL>  $DEB_DATE
+"
+{ printf '%s\n' "$DEB_STUB"; cat packaging/deb/debian/changelog; } \
+    > packaging/deb/debian/changelog.tmp
+mv packaging/deb/debian/changelog.tmp packaging/deb/debian/changelog
+
+# Prepend a stub entry to the rpm spec %changelog section. Insert directly
+# under the "%changelog" line, before the existing top entry.
+RPM_STUB="* $RPM_DATE $AUTHOR_NAME <$AUTHOR_EMAIL> - $NEW-1
+- TODO: release notes for $NEW (edit me before committing)
+"
+awk -v stub="$RPM_STUB" '
+    /^%changelog$/ { print; print stub; next }
+    { print }
+' packaging/rpm/eth-validator-stats.spec > packaging/rpm/eth-validator-stats.spec.tmp
+mv packaging/rpm/eth-validator-stats.spec.tmp packaging/rpm/eth-validator-stats.spec
+
 # Refresh the lockfile so its project-version line matches the new bump.
 uv sync >/dev/null
 
-# Confirm no $CURRENT references slipped past the regex anchors.
+# Confirm no $CURRENT references slipped past the regex anchors. The
+# existing %changelog / debian/changelog history entries will legitimately
+# still reference $CURRENT — that's the previous-release entry — so
+# filter them out of the leftover scan.
 LEFTOVERS=$(git grep -n -F "$CURRENT" -- \
     pyproject.toml \
     packaging/rpm/eth-validator-stats.spec \
+    packaging/deb/debian/changelog \
     README.md \
-    uv.lock 2>/dev/null || true)
+    uv.lock 2>/dev/null \
+    | grep -vE "(changelog|\.spec).*${CURRENT}-1" \
+    || true)
 
 cat <<EOF
 
 >>> bumped to $NEW. Files modified:
 $(git diff --stat --no-color pyproject.toml \
     packaging/rpm/eth-validator-stats.spec \
+    packaging/deb/debian/changelog \
     README.md uv.lock | sed 's/^/    /')
 
 EOF
@@ -157,12 +202,16 @@ if [[ -n "$LEFTOVERS" ]]; then
 fi
 
 cat <<EOF
-Still TODO (release-notes work, by hand):
-  packaging/deb/debian/changelog            — prepend an entry for $NEW-1
-  packaging/rpm/eth-validator-stats.spec    — prepend a %changelog entry for $NEW-1
+Stub changelog entries were prepended in:
+  packaging/deb/debian/changelog
+  packaging/rpm/eth-validator-stats.spec  (%changelog section)
 
-After writing the changelog entries:
-  git add -p && git commit -m "chore(release): bump to $NEW"
+The body of each stub is "TODO: release notes for $NEW" — edit both to
+your actual release notes before committing. Then:
+
+  ./scripts/bump.sh --verify
+  git add -p
+  git commit -m "chore(release): bump to $NEW"
   git tag -a v$NEW -m "v$NEW"
   git push origin main && git push origin v$NEW
 EOF
