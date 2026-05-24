@@ -109,6 +109,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     container:
       image: registry.fedoraproject.org/fedora:40
+    # Job-level env and defaults pin PATH and shell so the `uv` install
+    # script can't mutate $GITHUB_ENV in a way that drops /usr/bin from the
+    # env passed to subsequent `docker exec` calls (the bug that previously
+    # broke later steps with "exec: \"sh\": executable file not found").
+    env:
+      PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    defaults:
+      run:
+        shell: /bin/bash -e {0}
     strategy:
       fail-fast: false
       matrix:
