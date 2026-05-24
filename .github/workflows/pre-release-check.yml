@@ -52,7 +52,14 @@ jobs:
       - name: Verify package metadata
         run: |
           dpkg --info dist/*.deb
-          dpkg --contents dist/*.deb | head -30
+          echo "===== full package contents ====="
+          dpkg --contents dist/*.deb
+          echo "===== checking that /etc and /var/lib are NOT shipped in the .deb ====="
+          if dpkg --contents dist/*.deb | grep -E "\./etc/eth-validator-stats|\./var/lib/eth-validator-stats"; then
+            echo "WARNING: package owns /etc or /var/lib paths"
+          else
+            echo "OK: package does not own /etc or /var/lib"
+          fi
 
       - name: Install + smoke-test the service unit
         run: |
@@ -74,14 +81,33 @@ jobs:
 
       - name: Verify apt remove preserves user-created config
         run: |
+          set -x
+          # Diagnostic: what's in /etc and /var/lib BEFORE we write anything?
+          ls -la /etc/eth-validator-stats /var/lib/eth-validator-stats || true
+
           # Simulate a user-created config (normally written by `init --system`)
-          # and a state file. dpkg preserves package-owned directories if they
-          # contain user content; empty package-owned dirs are removed on
-          # `apt remove`, which is correct dpkg behavior.
+          # and a state file.
           echo "beacon_node_url: http://localhost:3500" \
               | sudo tee /etc/eth-validator-stats/config.yml >/dev/null
           echo "{}" | sudo tee /var/lib/eth-validator-stats/state.json >/dev/null
+
+          # Diagnostic: confirm the files actually got written
+          echo "===== after write ====="
+          ls -la /etc/eth-validator-stats /var/lib/eth-validator-stats
+          sudo cat /etc/eth-validator-stats/config.yml
+
+          # Diagnostic: which package owns these paths? (should be NONE)
+          echo "===== dpkg ownership of /etc/eth-validator-stats ====="
+          dpkg-query -S /etc/eth-validator-stats 2>&1 || true
+          dpkg-query -S /etc/eth-validator-stats/config.yml 2>&1 || true
+
           sudo apt-get remove -y eth-validator-stats
+
+          # Diagnostic: state AFTER apt remove
+          echo "===== after apt remove ====="
+          ls -la /etc/eth-validator-stats 2>&1 || echo "/etc/eth-validator-stats no longer exists"
+          ls -la /var/lib/eth-validator-stats 2>&1 || echo "/var/lib/eth-validator-stats no longer exists"
+
           test -f /etc/eth-validator-stats/config.yml \
               || (echo "ERROR: user config.yml removed on apt remove"; exit 1)
           test -f /var/lib/eth-validator-stats/state.json \
