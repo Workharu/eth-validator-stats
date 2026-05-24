@@ -13,10 +13,14 @@ override_dh_auto_install:
 	# or state files on `apt remove`.
 	mkdir -p $(DESTDIR)/opt/eth-validator-stats \
 	         $(DESTDIR)/usr/bin
-	# Build the bundled venv. Pip-installed scripts will get shebangs pointing
-	# at $(CURDIR)/$(VENV)/bin/python — we strip that prefix after install.
-	python3.11 -m venv $(VENV)
-	$(VENV)/bin/pip install --no-cache-dir .
+	# Bundle a self-contained python-build-standalone interpreter via uv.
+	# This drops the runtime dependency on system python3.11.
+	uv python install --install-dir $(DESTDIR)/opt/eth-validator-stats/python 3.11
+	# Locate the installed interpreter (uv places it under a versioned dir).
+	PBS_PYTHON=`find $(DESTDIR)/opt/eth-validator-stats/python -type f -name python3.11 | head -n1`; \
+	  test -n "$$PBS_PYTHON" || { echo "ERROR: no python3.11 found after uv install"; exit 1; }; \
+	  $$PBS_PYTHON -m venv --copies $(VENV); \
+	  $(VENV)/bin/pip install --no-cache-dir .
 	# Drop activation scripts (not needed at runtime; ExecStart calls the venv
 	# binary directly) so they don't carry the buildroot path into the .deb.
 	rm -f $(VENV)/bin/activate $(VENV)/bin/activate.csh \
