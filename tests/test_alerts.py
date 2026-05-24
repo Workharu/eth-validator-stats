@@ -199,6 +199,25 @@ def test_ntfy_swallows_errors(capsys):
     assert "ntfy notify failed" in err
 
 
+def test_ntfy_title_unicode_silently_fails(capsys):
+    """Documents the constraint: non-ASCII in the Title header is rejected by httpx.
+    NtfyNotifier swallows the error to stderr; nothing reaches the server. This is
+    why all caller-supplied titles in alerts.py must stay ASCII (glyphs in body)."""
+
+    sent: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent["title"] = request.headers.get("title")
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(handler)
+    n = NtfyNotifier("https://ntfy.sh/x", transport=transport)
+    n.send("validator 1 ✓ proposed", "body ok")
+    assert sent == {}  # never reached the handler
+    err = capsys.readouterr().err
+    assert "ntfy notify failed" in err
+
+
 def test_empty_topic_is_silent_noop():
     """NtfyNotifier with empty topic should not even attempt a request."""
 
@@ -339,7 +358,10 @@ def test_proposal_outcome_success():
     notif = FakeNotifier()
     out = process_proposal_outcomes(state, 3200, lambda s: 1, notif)
     assert out == [(1, "v1", 3100, True)]
-    assert "✓ proposed slot 3100" in notif.sent[0][0]
+    assert "proposed slot 3100" in notif.sent[0][0]
+    assert "block landed" in notif.sent[0][1]
+    # Title must be ASCII (HTTP header constraint); glyphs live in the body.
+    notif.sent[0][0].encode("ascii")
     assert state["validators"]["1"]["scheduled_proposals"][0]["verified"] is True
     assert state["validators"]["1"]["scheduled_proposals"][0]["produced"] is True
 
@@ -350,7 +372,9 @@ def test_proposal_outcome_missed_slot_returns_none_header():
     notif = FakeNotifier()
     out = process_proposal_outcomes(state, 3200, lambda s: None, notif)
     assert out == [(1, "v1", 3100, False)]
-    assert "✗ missed proposal" in notif.sent[0][0]
+    assert "missed proposal" in notif.sent[0][0]
+    # Title must be ASCII (HTTP header constraint); glyphs live in the body.
+    notif.sent[0][0].encode("ascii")
 
 
 def test_proposal_outcome_skips_already_verified():

@@ -132,20 +132,20 @@ def process_validator_alerts(
     return new_alerts, recoveries
 
 
-HeaderFetcher = Callable[[int], "int | None"]
-
-
 def record_scheduled_proposals(
     state: dict,
     duties: list[tuple[int, int]],
     configured_indices: set[int],
 ) -> None:
-    """Persist upcoming proposer duties into per-validator state. Idempotent."""
+    """Persist upcoming proposer duties into per-validator state for our validators.
+    Idempotent — re-recording the same (validator, slot) is a no-op.
+    """
     vstate = state.setdefault("validators", {})
     for slot, validator_index in duties:
         if validator_index not in configured_indices:
             continue
-        record = vstate.setdefault(str(validator_index), {})
+        key = str(validator_index)
+        record = vstate.setdefault(key, {})
         proposals = record.setdefault("scheduled_proposals", [])
         if any(int(p.get("slot", -1)) == slot for p in proposals):
             continue
@@ -160,7 +160,9 @@ def process_upcoming_proposals(
     lookahead_epochs: int,
     notifier: Notifier,
 ) -> list[tuple[int, str, int]]:
-    """Notify once per scheduled proposal that falls within the lookahead window."""
+    """Notify exactly once per scheduled proposal within the lookahead window.
+    Returns [(idx, label, slot)] for the alerts that fired.
+    """
     fired: list[tuple[int, str, int]] = []
     window_slots = lookahead_epochs * slots_per_epoch
     vstate = state.setdefault("validators", {})
@@ -172,7 +174,9 @@ def process_upcoming_proposals(
         label = record.get("label", "")
         for prop in record.get("scheduled_proposals", []):
             slot = int(prop.get("slot", -1))
-            if slot < current_slot or slot > current_slot + window_slots:
+            if slot < current_slot:
+                continue
+            if slot > current_slot + window_slots:
                 continue
             if prop.get("alerted"):
                 continue
@@ -188,14 +192,20 @@ def process_upcoming_proposals(
     return fired
 
 
+HeaderFetcher = Callable[[int], "int | None"]
+
+
 def process_proposal_outcomes(
     state: dict,
     current_slot: int,
     fetch_header_fn: HeaderFetcher,
     notifier: Notifier,
 ) -> list[tuple[int, str, int, bool]]:
-    """For each past, unverified scheduled proposal, query the canonical header
-    and notify success or miss. Mark verified."""
+    """For each scheduled proposal whose slot has passed and is not yet verified,
+    fetch the canonical block header at that slot. If the proposer_index matches our
+    validator, the block landed; otherwise it was missed (or reorged out).
+    Returns [(idx, label, slot, produced)].
+    """
     results: list[tuple[int, str, int, bool]] = []
     vstate = state.setdefault("validators", {})
     for idx_str, record in vstate.items():
@@ -213,18 +223,21 @@ def process_proposal_outcomes(
             try:
                 proposer_index = fetch_header_fn(slot)
             except Exception:
+                # Leave unverified; we'll retry on the next check run.
                 continue
             produced = proposer_index == idx
             label_part = f" {label}" if label else ""
+            # Keep titles ASCII — ntfy delivers the Title via an HTTP header
+            # which httpx ASCII-encodes; non-ASCII in the title silently fails.
             if produced:
                 notifier.send(
-                    f"validator {idx}{label_part} ✓ proposed slot {slot}",
-                    "block landed",
+                    f"validator {idx}{label_part} proposed slot {slot}",
+                    f"✓ block landed at slot {slot}",
                 )
             else:
                 notifier.send(
-                    f"validator {idx}{label_part} ✗ missed proposal at slot {slot}",
-                    "no block produced at this slot",
+                    f"validator {idx}{label_part} missed proposal at slot {slot}",
+                    f"✗ no block produced at slot {slot}",
                 )
             prop["verified"] = True
             prop["produced"] = produced
