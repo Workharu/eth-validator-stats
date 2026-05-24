@@ -142,7 +142,7 @@ def _step_beacon_url(args: WizardArgs, io: IOLike, portscan_fn: PortscanFn, beac
         io.write("  Format: scheme + host + port (NO API path).\n\n")
         io.write("  Examples:\n")
         io.write("    http://localhost:24010\n")
-        io.write("    http://192.168.10.15:5052\n")
+        io.write("    http://192.0.2.10:5052\n")
         io.write("    https://eth-node.example.com\n\n")
         io.write("  To verify your URL before pasting it in, run this in another terminal:\n")
         io.write("    curl <URL>/eth/v1/node/version\n")

@@ -36,6 +36,12 @@ alerts:
   # Prevents dust from triggering alerts; real withdrawals are normally >>this.
   withdrawal_threshold_gwei: 1000000
 
+  # Skip withdrawal detection if the two compared balance snapshots are this many
+  # slots apart or more. Default 64 slots ≈ 12.8 min on mainnet — wider gaps make
+  # it impossible to tell a real withdrawal apart from cumulative attestation
+  # losses during a `check` outage. Raise if you run `check` very infrequently.
+  withdrawal_max_gap_slots: 64
+
   # How far ahead to pre-notify about an upcoming block proposal.
   # 1 epoch ≈ 6.4 min on mainnet. Set to 0 to disable upcoming-proposal alerts.
   proposal_lookahead_epochs: 1

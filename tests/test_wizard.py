@@ -21,7 +21,7 @@ def test_wizard_happy_path_writes_expected_yaml(
     monkeypatch.delenv("BEACON_NODE_AUTH_TOKEN", raising=False)
 
     prompts = FakePrompts(answers=[
-        "192.168.10.15",        # host
+        "192.0.2.10",        # host
         "",                       # accept first found url
         "",                       # no auth token (n is default)
         "1113127",                # validator id
@@ -31,7 +31,7 @@ def test_wizard_happy_path_writes_expected_yaml(
         "",                       # accept arrival confirmation
     ])
     portscan = FakePortscanResult(found=[
-        Found(url="http://192.168.10.15:3500", port=3500, client_version="Prysm/v7", latency_ms=12),
+        Found(url="http://192.0.2.10:3500", port=3500, client_version="Prysm/v7", latency_ms=12),
     ])
     beacon = FakeBeaconClient(validators=[
         ValidatorInfo(index=1113127, pubkey="0xdeadbeef", status="active_ongoing", balance_gwei=32_000_000_000),
@@ -58,7 +58,7 @@ def test_wizard_happy_path_writes_expected_yaml(
     assert cfg_path.exists()
 
     loaded = load_config(cfg_path)
-    assert loaded.beacon_node_url == "http://192.168.10.15:3500"
+    assert loaded.beacon_node_url == "http://192.0.2.10:3500"
     assert loaded.beacon_auth_token == ""
     assert len(loaded.validators) == 1
     assert loaded.validators[0].index == 1113127
@@ -87,7 +87,7 @@ def test_wizard_portscan_finds_nothing_falls_back_to_manual_url(tmp_path: Path, 
 
     prompts = FakePrompts(answers=[
         "weird-host",                          # host
-        "http://192.168.10.15:24010",          # manual URL fallback
+        "http://192.0.2.10:24010",          # manual URL fallback
         "",                                    # no auth
         "1",                                   # validator id
         "v1",                                  # label
@@ -111,7 +111,7 @@ def test_wizard_portscan_finds_nothing_falls_back_to_manual_url(tmp_path: Path, 
     )
     assert rc == 0
     loaded = load_config(cfg_path)
-    assert loaded.beacon_node_url == "http://192.168.10.15:24010"
+    assert loaded.beacon_node_url == "http://192.0.2.10:24010"
     assert loaded.alerts.ntfy_topic == ""
     assert notifier.sent == []
     # Manual-URL fallback must give the user enough context to enter a valid URL
@@ -121,7 +121,7 @@ def test_wizard_portscan_finds_nothing_falls_back_to_manual_url(tmp_path: Path, 
     assert "/eth/v1/node/version" in written
     assert "curl" in written
     # And after they paste the URL, the wizard probes it and reports the client/version
-    assert "Probing http://192.168.10.15:24010/eth/v1/node/version" in written
+    assert "Probing http://192.0.2.10:24010/eth/v1/node/version" in written
     assert "✓ Connected: FakeBeacon/v1.0" in written
 
 

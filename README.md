@@ -81,7 +81,7 @@ Per-event, all routed through the same notifier (ntfy by default):
 |---|---|---|
 | `OFFLINE` | validator status leaves `active_ongoing`/`pending_*` | once per `cooldown_minutes`, resets on recovery |
 | `MISSED_ATTESTATIONS` | last N consecutive liveness records are misses (N default 2, override via `alerts.missed_attestations_threshold` in YAML or `--missed N` flag) | once per `cooldown_minutes` |
-| `withdrawal` | balance drops by ≥ `alerts.withdrawal_threshold_gwei` (default 0.001 ETH) while still active | once per drop (next poll resets the comparison baseline) |
+| `withdrawal` | balance drops by ≥ `alerts.withdrawal_threshold_gwei` (default 0.001 ETH) while still active AND the two compared balance snapshots are ≤ `alerts.withdrawal_max_gap_slots` apart (default 64 slots ≈ 12.8 min — avoids false positives from cumulative attestation losses during a `check` outage) | once per drop (next poll resets the comparison baseline) |
 | `proposing soon` | a configured validator is scheduled to propose within `alerts.proposal_lookahead_epochs` epochs (default 1 ≈ ~6 min) | exactly once per (validator, slot) |
 | `✓ proposed` / `✗ missed proposal` | scheduled slot has passed; verified against the canonical block header | once per (validator, slot) |
 | `MONITOR BLIND` / `MONITOR RECOVERED` | beacon node unreachable / reachable again | once per `cooldown_minutes` |

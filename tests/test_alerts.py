@@ -326,6 +326,69 @@ def test_withdrawal_skipped_for_unconfigured_validator():
     assert out == []
 
 
+def test_withdrawal_skipped_when_slot_gap_too_wide():
+    """If many slots passed between balance snapshots, the drop is ambiguous
+    (could be cumulative attestation losses) — don't attribute it to a withdrawal."""
+    state = {"validators": {"1": {
+        "previous_balance_gwei": 32_050_000_000,
+        "previous_balance_at_slot": 1000,    # snapshot was 200 slots ago
+        "last_balance_gwei": 32_000_000_000,
+        "last_balance_at_slot": 1200,
+        "last_status": "active_ongoing",
+        "label": "v1",
+    }}}
+    notif = FakeNotifier()
+    cfg = AlertsConfig(withdrawal_max_gap_slots=64)  # 200 > 64 → skip
+    out = process_withdrawals(state, {1}, notif, cfg, current_slot=1200)
+    assert out == []
+    assert notif.sent == []
+
+
+def test_withdrawal_fires_when_slot_gap_within_window():
+    state = {"validators": {"1": {
+        "previous_balance_gwei": 32_050_000_000,
+        "previous_balance_at_slot": 1150,    # 50 slots ago
+        "last_balance_gwei": 32_000_000_000,
+        "last_balance_at_slot": 1200,
+        "last_status": "active_ongoing",
+        "label": "v1",
+    }}}
+    notif = FakeNotifier()
+    cfg = AlertsConfig(withdrawal_max_gap_slots=64)  # 50 <= 64 → fires
+    out = process_withdrawals(state, {1}, notif, cfg, current_slot=1200)
+    assert len(out) == 1
+    assert "withdrawal" in notif.sent[0][0]
+
+
+def test_withdrawal_gap_check_disabled_when_current_slot_zero():
+    """Backward-compat path used by existing tests: omit current_slot → skip the gap check."""
+    state = {"validators": {"1": {
+        "previous_balance_gwei": 32_050_000_000,
+        "previous_balance_at_slot": 100,     # ancient
+        "last_balance_gwei": 32_000_000_000,
+        "last_status": "active_ongoing",
+        "label": "v1",
+    }}}
+    notif = FakeNotifier()
+    cfg = AlertsConfig(withdrawal_max_gap_slots=64)
+    out = process_withdrawals(state, {1}, notif, cfg)  # no current_slot
+    assert len(out) == 1  # gap check disabled, alert fires
+
+
+def test_withdrawal_gap_check_skipped_when_previous_slot_missing():
+    """Old state without previous_balance_at_slot must not crash; behaves as pre-gap-check."""
+    state = {"validators": {"1": {
+        "previous_balance_gwei": 32_050_000_000,
+        "last_balance_gwei": 32_000_000_000,
+        "last_status": "active_ongoing",
+        "label": "v1",
+    }}}
+    notif = FakeNotifier()
+    cfg = AlertsConfig(withdrawal_max_gap_slots=64)
+    out = process_withdrawals(state, {1}, notif, cfg, current_slot=10000)
+    assert len(out) == 1  # no previous_balance_at_slot → can't apply gap check, fall through
+
+
 # --- proposals --------------------------------------------------------------
 
 def test_record_scheduled_proposals_persists_only_configured_validators():

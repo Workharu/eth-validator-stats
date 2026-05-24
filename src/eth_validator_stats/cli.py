@@ -133,13 +133,19 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
         key = str(info_v.index)
         record = vstate.setdefault(key, {})
         # Snapshot the prior balance so process_withdrawals() can detect drops.
+        # Also stash the slot at which we observed it so we can refuse to attribute
+        # very-old drops to a withdrawal (process_withdrawals' gap check).
         prev_balance = record.get("last_balance_gwei")
         if prev_balance is not None:
             record["previous_balance_gwei"] = int(prev_balance)
+            prev_slot = record.get("last_balance_at_slot")
+            if prev_slot is not None:
+                record["previous_balance_at_slot"] = int(prev_slot)
         record["pubkey"] = info_v.pubkey
         record["label"] = entry.label
         record["last_status"] = info_v.status
         record["last_balance_gwei"] = info_v.balance_gwei
+        record["last_balance_at_slot"] = head.slot
         buffer = record.get("liveness", [])
         if info_v.index in liveness:
             buffer = append_liveness(buffer, target_liveness_epoch, liveness[info_v.index])
@@ -275,10 +281,11 @@ def cmd_check(args: argparse.Namespace) -> int:
     alerts = evaluate_alerts(rows, missed_threshold)
     configured = {row.index for row in rows}
     process_validator_alerts(state, configured, alerts, notifier, cfg.alerts, now)
-    process_withdrawals(state, configured, notifier, cfg.alerts)
 
-    info = chain_info_from_state(state)
     current_slot = int(state.get("current_slot", 0))
+    info = chain_info_from_state(state)
+    process_withdrawals(state, configured, notifier, cfg.alerts, current_slot)
+
     if info and current_slot > 0:
         process_upcoming_proposals(
             state, current_slot,

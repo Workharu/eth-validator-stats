@@ -15,6 +15,10 @@ class AlertsConfig:
     request_timeout_s: float = 5.0
     missed_attestations_threshold: int = 2
     withdrawal_threshold_gwei: int = 1_000_000  # 0.001 ETH — skim noise below this
+    # Skip withdrawal detection if the two compared balance snapshots are this many
+    # slots apart or more (default 64 ≈ ~12.8 min on mainnet). Wider gaps make it
+    # impossible to distinguish a real withdrawal from cumulative attestation losses.
+    withdrawal_max_gap_slots: int = 64
     proposal_lookahead_epochs: int = 1
 
 
@@ -290,12 +294,21 @@ def process_withdrawals(
     configured_indices: set[int],
     notifier: Notifier,
     cfg: AlertsConfig,
+    current_slot: int = 0,
 ) -> list[tuple[int, str, int]]:
     """Detect balance drops on active validators and notify.
 
     Compares `previous_balance_gwei` (set by poll() before overwriting last_balance_gwei)
     to the current `last_balance_gwei`. A drop >= cfg.withdrawal_threshold_gwei on an
-    active_ongoing validator is treated as a withdrawal. Returns [(idx, label, drop_gwei)].
+    active_ongoing validator is treated as a withdrawal.
+
+    If the two balance snapshots are >cfg.withdrawal_max_gap_slots apart (recorded via
+    previous_balance_at_slot / last_balance_at_slot), the drop is ambiguous — it could
+    be cumulative attestation losses over many epochs of downtime — and we skip alerting.
+    Passing current_slot=0 (or omitting it) disables the gap check entirely; that path
+    is intended only for tests.
+
+    Returns [(idx, label, drop_gwei)] for alerts that fired.
     """
     detected: list[tuple[int, str, int]] = []
     vstate = state.get("validators", {})
@@ -320,6 +333,12 @@ def process_withdrawals(
         drop = prev_i - curr_i
         if drop < cfg.withdrawal_threshold_gwei:
             continue
+        # Gap check: refuse to attribute drops to a "withdrawal" when too many
+        # slots passed between the two snapshots (could be attestation losses).
+        if current_slot > 0 and cfg.withdrawal_max_gap_slots > 0:
+            prev_slot = record.get("previous_balance_at_slot")
+            if prev_slot is not None and current_slot - int(prev_slot) > cfg.withdrawal_max_gap_slots:
+                continue
         label = record.get("label", "")
         detected.append((idx, label, drop))
         eth = drop / 1_000_000_000

@@ -94,6 +94,7 @@ def write_config(cfg: AppConfig, path: Path) -> None:
         "storm_threshold": cfg.alerts.storm_threshold,
         "missed_attestations_threshold": cfg.alerts.missed_attestations_threshold,
         "withdrawal_threshold_gwei": cfg.alerts.withdrawal_threshold_gwei,
+        "withdrawal_max_gap_slots": cfg.alerts.withdrawal_max_gap_slots,
         "proposal_lookahead_epochs": cfg.alerts.proposal_lookahead_epochs,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -165,6 +166,7 @@ def _parse_config(raw: dict) -> AppConfig:
         storm_threshold=int(alerts_raw.get("storm_threshold", 10)),
         missed_attestations_threshold=int(alerts_raw.get("missed_attestations_threshold", 2)),
         withdrawal_threshold_gwei=int(alerts_raw.get("withdrawal_threshold_gwei", 1_000_000)),
+        withdrawal_max_gap_slots=int(alerts_raw.get("withdrawal_max_gap_slots", 64)),
         proposal_lookahead_epochs=int(alerts_raw.get("proposal_lookahead_epochs", 1)),
     )
     return AppConfig(

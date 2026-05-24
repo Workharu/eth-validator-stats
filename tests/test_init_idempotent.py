@@ -18,7 +18,7 @@ def _bytes_after_run(cfg_path: Path) -> bytes:
     ])
     notifier = FakeNotifier()
     args = WizardArgs(
-        host=None, beacon_url="http://192.168.10.15:3500",
+        host=None, beacon_url="http://192.0.2.10:3500",
         auth_token="", validator="1113127", label="v1",
         ntfy_topic="eth-vstats-fixed", no_ntfy=False,
         yes=True, force=False,

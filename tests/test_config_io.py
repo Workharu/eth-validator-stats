@@ -146,7 +146,7 @@ def test_migrate_from_toml_refuses_if_yaml_exists(tmp_path: Path):
 
 
 def test_alerts_config_new_fields_defaults_round_trip(tmp_path: Path):
-    """The 3 new alert fields land in YAML with their declared defaults and round-trip."""
+    """New alert fields land in YAML with their declared defaults and round-trip."""
     cfg = AppConfig(
         beacon_node_url="http://localhost:3500",
         validators=[ConfigEntry(identifier="1", label="v", pubkey=None, index=1)],
@@ -158,10 +158,12 @@ def test_alerts_config_new_fields_defaults_round_trip(tmp_path: Path):
     text = target.read_text()
     assert "missed_attestations_threshold: 2" in text
     assert "withdrawal_threshold_gwei: 1000000" in text
+    assert "withdrawal_max_gap_slots: 64" in text
     assert "proposal_lookahead_epochs: 1" in text
     loaded = load_config(target)
     assert loaded.alerts.missed_attestations_threshold == 2
     assert loaded.alerts.withdrawal_threshold_gwei == 1_000_000
+    assert loaded.alerts.withdrawal_max_gap_slots == 64
     assert loaded.alerts.proposal_lookahead_epochs == 1
 
 
