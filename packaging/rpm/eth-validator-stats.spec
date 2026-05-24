@@ -1,3 +1,9 @@
+# Disable the debugsource / debuginfo subpackages. Our package bundles a
+# pre-built Python venv; there are no source files for RPM to extract debug
+# symbols from, and Fedora's default policy would otherwise fail with
+# "Empty %files file ... debugsourcefiles.list".
+%global debug_package %{nil}
+
 Name:           eth-validator-stats
 Version:        0.2.0
 Release:        1%{?dist}
