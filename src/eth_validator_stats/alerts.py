@@ -13,6 +13,9 @@ class AlertsConfig:
     cooldown_minutes: int = 30
     storm_threshold: int = 10
     request_timeout_s: float = 5.0
+    missed_attestations_threshold: int = 2
+    withdrawal_threshold_gwei: int = 1_000_000  # 0.001 ETH — skim noise below this
+    proposal_lookahead_epochs: int = 1
 
 
 class Notifier(Protocol):
