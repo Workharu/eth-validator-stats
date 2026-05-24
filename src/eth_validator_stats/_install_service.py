@@ -133,3 +133,79 @@ def install_service_system(run_as: str | None, force: bool) -> int:
         "Status: systemctl status eth-validator-stats\n"
     )
     return 0
+
+
+UNIT_TEMPLATE_USER = """\
+[Unit]
+Description=eth-validator-stats watcher
+Documentation=https://github.com/Workharu/eth-validator-stats
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={bin} watch
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def install_service_user(force: bool) -> int:
+    """Register a user-scope systemd unit at $XDG_CONFIG_HOME/systemd/user/.
+
+    Returns process exit code (0 on success, 1 on user error).
+    """
+    if os.geteuid() == 0:
+        print(
+            "error: --user is meant for non-root invocation. "
+            "Drop sudo, or omit --user for system scope.",
+            file=sys.stderr,
+        )
+        return 1
+
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+    unit_dir = xdg / "systemd" / "user"
+    unit_path = unit_dir / SERVICE_NAME
+
+    if unit_path.exists() and not force:
+        print(
+            f"error: {unit_path} already exists. Re-run with --force to overwrite.",
+            file=sys.stderr,
+        )
+        return 1
+
+    bin_path = _resolve_binary_path()
+    unit_content = UNIT_TEMPLATE_USER.format(bin=bin_path)
+
+    unit_dir.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text(unit_content)
+    os.chmod(unit_path, 0o644)
+
+    username = os.environ.get("USER", "")
+    linger = subprocess.run(
+        ["loginctl", "enable-linger", username] if username else ["loginctl", "enable-linger"],
+        capture_output=True, text=True, check=False,
+    )
+    if linger.returncode != 0 and username:
+        print(
+            f"note: could not enable linger automatically. Run this manually "
+            f"so the service survives logout: "
+            f"sudo loginctl enable-linger {username}"
+        )
+
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "--user", "enable", "--now", SERVICE_NAME], check=True)
+
+    print(
+        f"\nInstalled at {unit_path}.\n\n"
+        f"Next:\n"
+        f"  eth-validator-stats init    # per-user config\n\n"
+        f"Logs:   journalctl --user -u eth-validator-stats -f\n"
+        f"Status: systemctl --user status eth-validator-stats\n"
+    )
+    return 0

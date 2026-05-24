@@ -204,3 +204,48 @@ def test_install_service_system_run_as_overrides_sudo_user(monkeypatch, tmp_path
     written = fake_unit.read_text()
     assert "User=bob" in written
     assert "User=alice" not in written
+
+
+def test_install_service_user_refuses_with_sudo(monkeypatch, capsys):
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 0)
+    rc = svc.install_service_user(force=False)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "--user" in err or "sudo" in err.lower()
+
+
+def test_install_service_user_writes_unit_to_xdg_path(monkeypatch, tmp_path):
+    fake_bin = tmp_path / "eth-validator-stats"
+    fake_bin.write_text("#!/bin/sh\nexit 0\n")
+    fake_bin.chmod(0o755)
+    monkeypatch.setattr(sys, "argv", [str(fake_bin), "install-service", "--user"])
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 1000)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("USER", "alice")
+
+    def fake_run(cmd, *args, **kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+    monkeypatch.setattr(svc.subprocess, "run", fake_run)
+
+    rc = svc.install_service_user(force=False)
+    assert rc == 0
+
+    unit_path = tmp_path / "config" / "systemd" / "user" / svc.SERVICE_NAME
+    assert unit_path.exists()
+    content = unit_path.read_text()
+    assert "User=" not in content   # user-scope unit must NOT set User=
+    assert "Group=" not in content
+    assert f"ExecStart={fake_bin.resolve()} watch" in content
+
+
+def test_install_service_user_refuses_if_unit_exists_without_force(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 1000)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    unit_path = tmp_path / "config" / "systemd" / "user" / svc.SERVICE_NAME
+    unit_path.parent.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text("[Unit]\nexisting\n")
+
+    rc = svc.install_service_user(force=False)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "--force" in err
