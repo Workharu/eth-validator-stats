@@ -30,6 +30,11 @@ cp -r "$DEB_DIR/debian" "$SRC_STAGING/"
 cd "$SRC_STAGING"
 dpkg-buildpackage -us -uc -b
 
-mv "$BUILD_DIR/eth-validator-stats_${VERSION}-1_all.deb" "$DIST_DIR/"
+# debian/control declares `Architecture: any` (the package bundles an
+# arch-specific Python via python-build-standalone), so dpkg writes
+# eth-validator-stats_<version>-1_<arch>.deb. Glob to catch whichever arch
+# the build host produced; the matching dbgsym package gets `.ddeb`
+# extension so it's not picked up here.
+mv "$BUILD_DIR/eth-validator-stats_${VERSION}-1_"*.deb "$DIST_DIR/"
 
-echo ">>> built $DIST_DIR/eth-validator-stats_${VERSION}-1_all.deb"
+echo ">>> built $(ls "$DIST_DIR"/eth-validator-stats_${VERSION}-1_*.deb)"
