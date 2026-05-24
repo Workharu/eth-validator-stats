@@ -34,10 +34,18 @@ class NullNotifier:
 
 
 class NtfyNotifier:
-    def __init__(self, topic_url: str, *, timeout: float = 5.0, transport: httpx.BaseTransport | None = None) -> None:
+    def __init__(
+        self,
+        topic_url: str,
+        *,
+        timeout: float = 5.0,
+        transport: httpx.BaseTransport | None = None,
+        raise_on_error: bool = False,
+    ) -> None:
         self.topic_url = topic_url
         self.timeout = timeout
         self._transport = transport
+        self._raise_on_error = raise_on_error
 
     def send(self, title: str, body: str) -> None:
         if not self.topic_url:
@@ -52,6 +60,8 @@ class NtfyNotifier:
                 r.raise_for_status()
         except Exception as e:
             logger.warning("ntfy notify failed: %s", e)
+            if self._raise_on_error:
+                raise
 
 
 def make_notifier(cfg: AlertsConfig) -> Notifier:

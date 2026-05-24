@@ -555,3 +555,37 @@ def test_ntfy_failure_is_logged_at_warning(caplog):
         "ntfy notify failed" in rec.message and rec.levelno == logging.WARNING
         for rec in caplog.records
     ), [rec.message for rec in caplog.records]
+
+
+def test_ntfy_notifier_swallows_errors_by_default():
+    """Production semantics: a 500 from ntfy must NOT crash the caller."""
+    def handler(request):
+        return httpx.Response(500, text="server down")
+
+    n = NtfyNotifier(
+        "https://ntfy.example/topic",
+        timeout=1.0,
+        transport=httpx.MockTransport(handler),
+    )
+    n.send("title", "body")  # must not raise
+
+
+def test_ntfy_notifier_raises_when_raise_on_error_true():
+    """Simulate semantics: a 500 must surface so `simulate` can exit 1."""
+    def handler(request):
+        return httpx.Response(500, text="server down")
+
+    n = NtfyNotifier(
+        "https://ntfy.example/topic",
+        timeout=1.0,
+        transport=httpx.MockTransport(handler),
+        raise_on_error=True,
+    )
+    with pytest.raises(httpx.HTTPStatusError):
+        n.send("title", "body")
+
+
+def test_ntfy_notifier_empty_topic_never_raises_even_with_flag():
+    """An empty topic short-circuits before any HTTP call; raise_on_error is moot."""
+    n = NtfyNotifier("", timeout=1.0, raise_on_error=True)
+    n.send("title", "body")  # must not raise
