@@ -299,13 +299,24 @@ Notification failures (network blip, ntfy server down) are logged to stderr but 
 
 The state file in `~/.local/share/eth-validator-stats/state.json` builds up a per-validator rolling buffer of the last ~10 epochs of liveness across runs. **Last-5-attestations** is sparse-by-design: it shows the last 5 epochs the CLI has observed, not the last 5 epochs of chain history. Run frequently (cron at 1–5 minutes is fine) and the buffer stays current.
 
+## Where is my config?
+
+When reading, the CLI searches in this order and uses the first one it finds:
+
+1. **`$ETH_VALIDATOR_STATS_CONFIG`** — explicit override (used by the systemd unit and tests).
+2. **`/etc/eth-validator-stats/config.yml`** — system-wide, written by `init --system` and the `.deb`/`.rpm` post-install scripts. **If you installed via a distro package, this is where your config lives, and it's found regardless of which user is invoking the CLI.**
+3. **`~/.config/eth-validator-stats/config.yml`** — per-user XDG default, written by `init` (without `--system`).
+4. *(legacy)* `~/.config/eth-validator-stats/config.toml` — pre-YAML format; prints a deprecation hint.
+
+When **writing** (i.e. `init`), the system path is used only with `--system`; otherwise writes go to the per-user XDG path. The lookup order means a per-user config is never accidentally overshadowed by a system config you didn't intend to write — you have to deliberately run `init --system` to put one there.
+
 ## Environment variables
 
 | Var | Default | Meaning |
 |---|---|---|
 | `BEACON_NODE_URL` | `http://localhost:3500` | Beacon node HTTP endpoint. Wins over the `beacon_node_url` field in config. |
 | `BEACON_NODE_AUTH_TOKEN` | (none) | Optional Bearer token for hosted providers / proxied nodes. Wins over `beacon_auth_token` in config. |
-| `ETH_VALIDATOR_STATS_CONFIG` | `$XDG_CONFIG_HOME/eth-validator-stats/config.yml` | Override config path. |
+| `ETH_VALIDATOR_STATS_CONFIG` | (auto-discovered, see above) | Override config path. When set, it wins over both `/etc` and `~/.config`. |
 | `ETH_VALIDATOR_STATS_STATE` | `$XDG_DATA_HOME/eth-validator-stats/state.json` | Override state file path. |
 
 ## Diagnosing a new node

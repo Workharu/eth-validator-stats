@@ -9,6 +9,7 @@ from eth_validator_stats.alerts import AlertsConfig
 from eth_validator_stats.config_io import (
     AppConfig,
     ConfigEntry,
+    _resolve_existing_config,
     load_config,
     migrate_from_toml,
     write_config,
@@ -182,3 +183,107 @@ def test_alerts_config_custom_overrides_load(tmp_path: Path):
     assert cfg.alerts.missed_attestations_threshold == 5
     assert cfg.alerts.withdrawal_threshold_gwei == 50_000_000
     assert cfg.alerts.proposal_lookahead_epochs == 2
+
+
+# --- config-lookup precedence (env -> /etc -> ~/.config -> legacy) -----------
+
+def _minimal_yml_text() -> str:
+    return (
+        "beacon_node_url: http://from-resolver\n"
+        "validators:\n"
+        "  - index: 42\n"
+    )
+
+
+def test_resolver_finds_system_config_when_user_config_absent(
+    tmp_path: Path, monkeypatch
+):
+    """If /etc/eth-validator-stats/config.yml exists and there is no user
+    config, the resolver returns the system path."""
+    fake_etc = tmp_path / "etc" / "eth-validator-stats" / "config.yml"
+    fake_etc.parent.mkdir(parents=True)
+    fake_etc.write_text(_minimal_yml_text())
+
+    # Point both candidate paths at tmp_path (no user config will exist).
+    monkeypatch.setattr(
+        "eth_validator_stats.config_io.SYSTEM_CONFIG_PATH", fake_etc
+    )
+    monkeypatch.setenv(
+        "ETH_VALIDATOR_STATS_CONFIG_HOME", str(tmp_path / "no-such-home")
+    )
+    # Ensure no env override interferes.
+    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
+    # And reroute the user-default path via platformdirs.
+    monkeypatch.setattr(
+        "platformdirs.user_config_path",
+        lambda _: tmp_path / "no-such-home" / ".config",
+    )
+
+    p, is_legacy = _resolve_existing_config()
+    assert p == fake_etc
+    assert is_legacy is False
+
+
+def test_resolver_prefers_system_config_over_user_config(
+    tmp_path: Path, monkeypatch
+):
+    """When both /etc and ~/.config configs exist, /etc wins (per design)."""
+    fake_etc = tmp_path / "etc" / "config.yml"
+    fake_etc.parent.mkdir(parents=True)
+    fake_etc.write_text("beacon_node_url: http://from-etc\nvalidators:\n  - index: 1\n")
+
+    fake_user = tmp_path / "home" / "config.yml"
+    fake_user.parent.mkdir(parents=True)
+    fake_user.write_text("beacon_node_url: http://from-user\nvalidators:\n  - index: 2\n")
+
+    monkeypatch.setattr(
+        "eth_validator_stats.config_io.SYSTEM_CONFIG_PATH", fake_etc
+    )
+    monkeypatch.setattr(
+        "platformdirs.user_config_path", lambda _: fake_user.parent
+    )
+    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
+
+    cfg = load_config()
+    assert cfg.beacon_node_url == "http://from-etc"
+
+
+def test_resolver_falls_back_to_user_config_when_no_system_config(
+    tmp_path: Path, monkeypatch
+):
+    fake_user = tmp_path / "home" / "config.yml"
+    fake_user.parent.mkdir(parents=True)
+    fake_user.write_text(_minimal_yml_text())
+
+    monkeypatch.setattr(
+        "eth_validator_stats.config_io.SYSTEM_CONFIG_PATH",
+        tmp_path / "nope" / "config.yml",  # doesn't exist
+    )
+    monkeypatch.setattr(
+        "platformdirs.user_config_path", lambda _: fake_user.parent
+    )
+    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
+
+    cfg = load_config()
+    assert cfg.beacon_node_url == "http://from-resolver"
+
+
+def test_resolver_env_override_wins_over_system_and_user(
+    tmp_path: Path, monkeypatch
+):
+    """ETH_VALIDATOR_STATS_CONFIG=/path beats both /etc and ~/.config."""
+    fake_etc = tmp_path / "etc.yml"
+    fake_etc.write_text("beacon_node_url: http://from-etc\nvalidators:\n  - index: 1\n")
+
+    fake_explicit = tmp_path / "explicit.yml"
+    fake_explicit.write_text(
+        "beacon_node_url: http://from-env\nvalidators:\n  - index: 9\n"
+    )
+
+    monkeypatch.setattr(
+        "eth_validator_stats.config_io.SYSTEM_CONFIG_PATH", fake_etc
+    )
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(fake_explicit))
+
+    cfg = load_config()
+    assert cfg.beacon_node_url == "http://from-env"

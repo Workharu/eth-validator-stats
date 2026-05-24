@@ -26,7 +26,7 @@ from .alerts import (
 )
 from ._simulate import EVENTS
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
-from .config_io import AppConfig, ConfigEntry, config_path, load_config
+from .config_io import AppConfig, ConfigEntry, load_config
 from .onboarding import WizardArgs, run_wizard
 from .render import DisplayRow, build_table
 
@@ -197,7 +197,7 @@ def _probe_endpoint(label: str, fn) -> tuple[str, str, str]:
 
 
 def cmd_info(args: argparse.Namespace) -> int:
-    cfg = load_config(config_path())
+    cfg = load_config()
     console = Console()
 
     auth_repr = "Bearer (***)" if cfg.beacon_auth_token else "none"
@@ -258,7 +258,7 @@ def cmd_info(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    cfg = load_config(config_path())
+    cfg = load_config()
     state = load_state(state_path())
     rows = poll(cfg, state)
     save_state(state_path(), state)
@@ -274,7 +274,7 @@ def run_check_once(args: argparse.Namespace) -> int:
     `watch` command can call it in a loop. Behavior is identical to
     the pre-refactor `cmd_check`.
     """
-    cfg = load_config(config_path())
+    cfg = load_config()
     state = load_state(state_path())
     notifier = make_notifier(cfg.alerts)
     now = int(time.time())
@@ -440,7 +440,7 @@ def cmd_simulate(args: argparse.Namespace, *, _notifier=None) -> int:
     kwarg is a test seam; production callers go through argparse which
     never sets it, so the real NtfyNotifier is constructed below.
     """
-    cfg = load_config(config_path())
+    cfg = load_config()
 
     builder, scope = EVENTS[args.event]
 

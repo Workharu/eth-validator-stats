@@ -12,6 +12,11 @@ from .alerts import AlertsConfig
 DEFAULT_BEACON_URL = "http://localhost:3500"
 DEFAULT_CONFIG_FILENAME = "config.yml"
 LEGACY_CONFIG_FILENAME = "config.toml"
+# System-wide config location written by `init --system` and by the
+# .deb / .rpm post-install scripts. Searched before the per-user XDG path
+# when reading, so a service install is visible to `eth-validator-stats
+# status` runs from any interactive shell.
+SYSTEM_CONFIG_PATH = Path("/etc/eth-validator-stats/config.yml")
 
 
 @dataclass(frozen=True)
@@ -31,7 +36,13 @@ class AppConfig:
 
 
 def config_path() -> Path:
-    """Resolve the YAML config path. Honors ETH_VALIDATOR_STATS_CONFIG override."""
+    """Where a new per-user config should be WRITTEN (XDG default).
+
+    Honors ETH_VALIDATOR_STATS_CONFIG as an explicit override. Used by
+    `init` (without --system) to decide where to drop the new config.
+    For READING, use load_config() or _resolve_existing_config() — those
+    additionally consult /etc/eth-validator-stats/config.yml.
+    """
     override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
     if override:
         return Path(override)
@@ -105,9 +116,25 @@ def write_config(cfg: AppConfig, path: Path) -> None:
 
 
 def _resolve_existing_config() -> tuple[Path, bool]:
-    """Pick the right existing config file.
-    Returns (path, is_legacy_auto_resolved).
+    """Find the first existing config file along the search chain.
+
+    Order:
+      1. $ETH_VALIDATOR_STATS_CONFIG (explicit override) — honored even if
+         it doesn't exist (load_config will surface the missing-file error).
+      2. /etc/eth-validator-stats/config.yml — system-wide, written by
+         `init --system` and the .deb / .rpm post-install scripts.
+      3. ~/.config/eth-validator-stats/config.yml — per-user XDG default.
+      4. ~/.config/eth-validator-stats/config.toml — legacy pre-YAML format.
+
+    Returns (path, is_legacy_auto_resolved). The path is the first match.
+    If nothing exists, returns the per-user YAML path so error messages and
+    init writes both point at the same conventional location.
     """
+    override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
+    if override:
+        return (Path(override), False)
+    if SYSTEM_CONFIG_PATH.exists():
+        return (SYSTEM_CONFIG_PATH, False)
     yml = config_path()
     if yml.exists():
         return (yml, False)
