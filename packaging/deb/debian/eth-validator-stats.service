@@ -1,0 +1,21 @@
+[Unit]
+Description=eth-validator-stats watcher
+Documentation=https://github.com/Workharu/eth-validator-stats
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/etc/eth-validator-stats/config.yml
+
+[Service]
+Type=simple
+User=eth-validator-stats
+Group=eth-validator-stats
+ExecStart=/opt/eth-validator-stats/venv/bin/eth-validator-stats watch
+Environment="ETH_VALIDATOR_STATS_CONFIG=/etc/eth-validator-stats/config.yml"
+Environment="ETH_VALIDATOR_STATS_STATE=/var/lib/eth-validator-stats/state.json"
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

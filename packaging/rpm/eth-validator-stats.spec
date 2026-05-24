@@ -46,9 +46,23 @@ mkdir -p %{buildroot}/opt/%{name} \
 python3.11 -m venv %{buildroot}/opt/%{name}/venv
 %{buildroot}/opt/%{name}/venv/bin/pip install --no-cache-dir .
 
-# Rewrite shebangs that point at the buildroot.
-find %{buildroot}/opt/%{name}/venv/bin -type f \
-    -exec sed -i "s|#!%{buildroot}/opt/%{name}|#!/opt/%{name}|g" {} +
+# Rewrite shebangs in pip-installed scripts so they point at /opt/%{name}/...
+# instead of the buildroot.
+find %{buildroot}/opt/%{name}/venv/bin -type f -executable \
+    -exec sed -i "s|^#!%{buildroot}|#!|g" {} +
+
+# Rewrite buildroot path references in pyvenv.cfg (the `executable` and
+# `command` lines record the absolute path used to create the venv).
+sed -i "s|%{buildroot}||g" %{buildroot}/opt/%{name}/venv/pyvenv.cfg
+
+# Drop activation scripts: they're not needed at runtime (the service
+# ExecStart calls the venv binary directly) and they embed the buildroot
+# path in VIRTUAL_ENV=..., which would cause check-buildroot to abort.
+rm -f %{buildroot}/opt/%{name}/venv/bin/activate \
+      %{buildroot}/opt/%{name}/venv/bin/activate.csh \
+      %{buildroot}/opt/%{name}/venv/bin/activate.fish \
+      %{buildroot}/opt/%{name}/venv/bin/activate.nu \
+      %{buildroot}/opt/%{name}/venv/bin/activate.ps1
 
 # Strip __pycache__ / .pyc to keep the package small.
 find %{buildroot}/opt/%{name}/venv -type d -name '__pycache__' -prune -exec rm -rf {} +

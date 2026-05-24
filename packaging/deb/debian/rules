@@ -1,4 +1,33 @@
 #!/usr/bin/make -f
 
+DESTDIR := debian/eth-validator-stats
+VENV    := $(DESTDIR)/opt/eth-validator-stats/venv
+
 %:
 	dh $@
+
+override_dh_auto_install:
+	mkdir -p $(DESTDIR)/opt/eth-validator-stats \
+	         $(DESTDIR)/usr/bin \
+	         $(DESTDIR)/etc/eth-validator-stats \
+	         $(DESTDIR)/var/lib/eth-validator-stats
+	# Build the bundled venv. Pip-installed scripts will get shebangs
+	# pointing at $(CURDIR)/$(VENV)/bin/python; we rewrite those below.
+	python3.11 -m venv $(VENV)
+	$(VENV)/bin/pip install --no-cache-dir .
+	# Rewrite shebangs in venv/bin to drop the build path prefix.
+	find $(VENV)/bin -type f -executable \
+	    -exec sed -i 's|^#!$(CURDIR)/$(DESTDIR)|#!|g' {} +
+	# Rewrite buildroot path references in pyvenv.cfg.
+	sed -i 's|$(CURDIR)/$(DESTDIR)||g' $(VENV)/pyvenv.cfg
+	# Drop activation scripts (not needed at runtime; ExecStart calls the venv
+	# binary directly) so dpkg doesn't see buildroot paths inside them.
+	rm -f $(VENV)/bin/activate $(VENV)/bin/activate.csh \
+	      $(VENV)/bin/activate.fish $(VENV)/bin/activate.nu \
+	      $(VENV)/bin/activate.ps1
+	# Strip caches to keep the package small.
+	find $(VENV) -type d -name '__pycache__' -prune -exec rm -rf {} +
+	find $(VENV) -name '*.pyc' -delete
+	# /usr/bin entrypoint symlink.
+	ln -sf /opt/eth-validator-stats/venv/bin/eth-validator-stats \
+	       $(DESTDIR)/usr/bin/eth-validator-stats
