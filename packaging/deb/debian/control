@@ -1,0 +1,20 @@
+Source: eth-validator-stats
+Section: net
+Priority: optional
+Maintainer: Workharu <Workharu@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), python3.11, python3.11-venv
+Standards-Version: 4.6.2
+Homepage: https://github.com/Workharu/eth-validator-stats
+
+Package: eth-validator-stats
+Architecture: all
+Depends: ${misc:Depends}, python3.11, python3.11-venv, adduser
+Description: Ethereum validator stats watcher
+ Tiny self-hosted CLI for Ethereum validator stats, backed by your own
+ beacon node. Provides one-shot, cron-style, and long-running supervised
+ modes. Talks to any beacon node implementing the standard Ethereum
+ Beacon API (Prysm, Lighthouse, Teku, Nimbus, Lodestar).
+ .
+ This package installs a system service that runs the watcher under
+ systemd. Run `sudo eth-validator-stats init --system` after install to
+ configure.

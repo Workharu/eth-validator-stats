@@ -1,0 +1,36 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # 1. Create system user (idempotent)
+        if ! getent passwd eth-validator-stats >/dev/null; then
+            adduser --system --no-create-home \
+                    --home /var/lib/eth-validator-stats \
+                    --shell /usr/sbin/nologin \
+                    --group eth-validator-stats
+        fi
+
+        # 2. chown config + state dirs
+        chown -R eth-validator-stats:eth-validator-stats \
+            /etc/eth-validator-stats /var/lib/eth-validator-stats
+        chmod 0750 /etc/eth-validator-stats /var/lib/eth-validator-stats
+
+        # 3. Helpful next-step message
+        cat <<'EOF'
+
+eth-validator-stats installed.
+
+Next step:
+  sudo eth-validator-stats init --system
+
+The systemd unit is enabled but waits on /etc/eth-validator-stats/config.yml
+(ConditionPathExists). It will start automatically once the config exists.
+
+EOF
+        ;;
+esac
+
+#DEBHELPER#
+
+exit 0

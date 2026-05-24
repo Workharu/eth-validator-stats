@@ -1,0 +1,5 @@
+debian/tmp/opt/eth-validator-stats/venv         opt/eth-validator-stats/
+debian/tmp/usr/bin/eth-validator-stats          usr/bin/
+debian/tmp/lib/systemd/system/eth-validator-stats.service   lib/systemd/system/
+debian/tmp/etc/eth-validator-stats              etc/
+debian/tmp/var/lib/eth-validator-stats          var/lib/
