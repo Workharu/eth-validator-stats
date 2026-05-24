@@ -119,6 +119,30 @@ def test_storm_threshold_boundary_does_not_collapse():
     assert all("VALIDATOR STORM" not in t for t, _ in notif.sent)
 
 
+def test_recovery_storm_grouping_collapses_many_recoveries():
+    """A mass-outage recovery sends one summary, not N individual RECOVERED pushes."""
+    # Seed state with 5 validators all in 'alerted' status
+    state = {"validators": {str(i): {"alerted_rule": "OFFLINE", "alerted_until_ts": 5000, "label": f"v{i}"}
+                            for i in range(1, 6)}}
+    notif = FakeNotifier()
+    cfg = _cfg(storm_threshold=3)  # 5 recoveries > 3 threshold
+    # No current alerts — all 5 recovered simultaneously
+    process_validator_alerts(state, {1, 2, 3, 4, 5}, [], notif, cfg, now=10_000)
+    assert len(notif.sent) == 1
+    assert notif.sent[0][0] == "VALIDATOR STORM RECOVERED"
+    assert "5 validators recovered" in notif.sent[0][1]
+
+
+def test_recovery_storm_threshold_boundary_does_not_collapse():
+    state = {"validators": {str(i): {"alerted_rule": "OFFLINE", "alerted_until_ts": 5000, "label": f"v{i}"}
+                            for i in range(1, 4)}}
+    notif = FakeNotifier()
+    cfg = _cfg(storm_threshold=3)  # 3 == threshold, not >
+    process_validator_alerts(state, {1, 2, 3}, [], notif, cfg, now=10_000)
+    assert len(notif.sent) == 3
+    assert all("STORM" not in t for t, _ in notif.sent)
+
+
 def test_blind_notifies_once_within_cooldown():
     state: dict = {}
     notif = FakeNotifier()

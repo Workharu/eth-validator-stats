@@ -125,9 +125,19 @@ def process_validator_alerts(
             label_part = f" {label}" if label else ""
             notifier.send(f"validator {idx}{label_part}", rule)
 
-    for idx, label in recoveries:
-        label_part = f" {label}" if label else ""
-        notifier.send(f"validator {idx}{label_part} RECOVERED", "back to active_ongoing")
+    if len(recoveries) > cfg.storm_threshold:
+        sample = ", ".join(
+            f"{idx}({label})" if label else str(idx)
+            for idx, label in recoveries[:5]
+        )
+        notifier.send(
+            "VALIDATOR STORM RECOVERED",
+            f"{len(recoveries)} validators recovered. Sample: {sample}",
+        )
+    else:
+        for idx, label in recoveries:
+            label_part = f" {label}" if label else ""
+            notifier.send(f"validator {idx}{label_part} RECOVERED", "back to active_ongoing")
 
     return new_alerts, recoveries
 
