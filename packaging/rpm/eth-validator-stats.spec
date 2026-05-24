@@ -36,11 +36,12 @@ to configure.
 # nothing to compile
 
 %install
+# Only stage dirs the package will own. /etc/%{name} and /var/lib/%{name}
+# are created in %post so RPM doesn't own them — that way user-created
+# files inside them survive `rpm -e` cleanly.
 mkdir -p %{buildroot}/opt/%{name} \
          %{buildroot}%{_bindir} \
-         %{buildroot}%{_unitdir} \
-         %{buildroot}/etc/%{name} \
-         %{buildroot}/var/lib/%{name}
+         %{buildroot}%{_unitdir}
 
 # Build the venv at the final runtime path so shebangs resolve.
 python3.11 -m venv %{buildroot}/opt/%{name}/venv
@@ -104,6 +105,9 @@ getent passwd eth-validator-stats >/dev/null || \
 exit 0
 
 %post
+# Create config + state dirs here (not in %install) so RPM doesn't own them,
+# which means user-created files inside survive `rpm -e`.
+mkdir -p /etc/%{name} /var/lib/%{name}
 chown -R eth-validator-stats:eth-validator-stats /etc/%{name} /var/lib/%{name}
 chmod 0750 /etc/%{name} /var/lib/%{name}
 %systemd_post %{name}.service
@@ -133,8 +137,9 @@ fi
 /opt/%{name}/venv
 %{_bindir}/%{name}
 %{_unitdir}/%{name}.service
-%dir %attr(0750, eth-validator-stats, eth-validator-stats) /etc/%{name}
-%dir %attr(0750, eth-validator-stats, eth-validator-stats) /var/lib/%{name}
+# /etc/%{name} and /var/lib/%{name} are intentionally NOT listed here:
+# %post creates them so the package does not own the dirs (preserving any
+# user-created contents on uninstall).
 
 %changelog
 * Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.2.0-1

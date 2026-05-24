@@ -11,7 +11,10 @@ case "$1" in
                     --group eth-validator-stats
         fi
 
-        # 2. chown config + state dirs
+        # 2. Create + chown config and state dirs. We deliberately do NOT
+        # ship these dirs in the .deb so dpkg never owns them — that way
+        # user-created files inside them are not removed on `apt remove`.
+        mkdir -p /etc/eth-validator-stats /var/lib/eth-validator-stats
         chown -R eth-validator-stats:eth-validator-stats \
             /etc/eth-validator-stats /var/lib/eth-validator-stats
         chmod 0750 /etc/eth-validator-stats /var/lib/eth-validator-stats

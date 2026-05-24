@@ -7,10 +7,12 @@ VENV    := $(DESTDIR)/opt/eth-validator-stats/venv
 	dh $@
 
 override_dh_auto_install:
+	# Only create /opt and /usr/bin here. /etc/eth-validator-stats and
+	# /var/lib/eth-validator-stats are created in postinst so the package
+	# does NOT own them — that way dpkg won't touch user-created config
+	# or state files on `apt remove`.
 	mkdir -p $(DESTDIR)/opt/eth-validator-stats \
-	         $(DESTDIR)/usr/bin \
-	         $(DESTDIR)/etc/eth-validator-stats \
-	         $(DESTDIR)/var/lib/eth-validator-stats
+	         $(DESTDIR)/usr/bin
 	# Build the bundled venv. Pip-installed scripts will get shebangs pointing
 	# at $(CURDIR)/$(VENV)/bin/python — we strip that prefix after install.
 	python3.11 -m venv $(VENV)
