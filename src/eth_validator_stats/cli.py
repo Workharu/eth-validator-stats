@@ -15,7 +15,11 @@ from .alerts import (
     clear_blind_if_recovered,
     make_notifier,
     process_blind,
+    process_proposal_outcomes,
+    process_upcoming_proposals,
     process_validator_alerts,
+    process_withdrawals,
+    record_scheduled_proposals,
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
 from .config_io import AppConfig, ConfigEntry, config_path, load_config
@@ -77,12 +81,26 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
                 "slots_per_epoch": info.slots_per_epoch,
             }
         head = client.get_head()
+        state["current_slot"] = head.slot
         current_epoch = epoch_of(head.slot, info)
         target_liveness_epoch = max(current_epoch - 1, 0)
 
         ids = [e.identifier for e in cfg.validators]
         fresh: list[ValidatorInfo] = client.get_validators(ids)
         indices = [v.index for v in fresh]
+
+        # Once per epoch boundary, fetch proposer duties for current + next epoch.
+        last_duties_epoch = int(state.get("last_duties_epoch", -1))
+        if current_epoch > last_duties_epoch and indices:
+            configured_set = set(indices)
+            try:
+                duties = client.get_proposer_duties(current_epoch)
+                duties += client.get_proposer_duties(current_epoch + 1)
+                record_scheduled_proposals(state, duties, configured_set)
+                state["last_duties_epoch"] = current_epoch
+            except Exception as e:
+                sys.stderr.write(f"warning: proposer duties fetch failed: {e}\n")
+
         liveness_result = client.get_liveness(target_liveness_epoch, indices) if indices else {}
         if liveness_result is None:
             if not state.get("liveness_unsupported_warned"):
@@ -249,11 +267,31 @@ def cmd_check(args: argparse.Namespace) -> int:
         return 2
 
     clear_blind_if_recovered(state, notifier)
-    save_state(state_path(), state)
 
-    alerts = evaluate_alerts(rows, args.missed)
+    # CLI flag wins over config; otherwise use config default (2).
+    missed_threshold = args.missed if args.missed is not None else cfg.alerts.missed_attestations_threshold
+
+    alerts = evaluate_alerts(rows, missed_threshold)
     configured = {row.index for row in rows}
     process_validator_alerts(state, configured, alerts, notifier, cfg.alerts, now)
+    process_withdrawals(state, configured, notifier, cfg.alerts)
+
+    info = chain_info_from_state(state)
+    current_slot = int(state.get("current_slot", 0))
+    if info and current_slot > 0:
+        process_upcoming_proposals(
+            state, current_slot,
+            info.seconds_per_slot, info.slots_per_epoch,
+            cfg.alerts.proposal_lookahead_epochs,
+            notifier,
+        )
+        # Outcome verification needs another beacon client call for headers
+        try:
+            with BeaconClient(cfg.beacon_node_url, auth_token=cfg.beacon_auth_token or None) as bc:
+                process_proposal_outcomes(state, current_slot, bc.get_block_header_at_slot, notifier)
+        except (httpx.HTTPError, OSError) as e:
+            sys.stderr.write(f"warning: proposal outcome verification failed: {e}\n")
+
     save_state(state_path(), state)
 
     if not alerts:
@@ -333,7 +371,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_status.set_defaults(func=cmd_status)
 
     p_check = sub.add_parser("check", help="Cron mode: print offenders, exit 2 if any.")
-    p_check.add_argument("--missed", type=int, default=3, help="Consecutive missed attestations to alert on (default: 3).")
+    p_check.add_argument("--missed", type=int, default=None, help="Consecutive missed attestations to alert on (overrides alerts.missed_attestations_threshold in config; config default is 2).")
     p_check.set_defaults(func=cmd_check)
 
     p_info = sub.add_parser("info", help="Probe the beacon node and report client/version + endpoint support.")
