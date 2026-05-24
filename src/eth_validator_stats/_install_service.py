@@ -209,3 +209,63 @@ def install_service_user(force: bool) -> int:
         f"Status: systemctl --user status eth-validator-stats\n"
     )
     return 0
+
+
+def uninstall_service_system(purge: bool) -> int:
+    """Remove the system-scope systemd unit and (optionally) config/state dirs."""
+    if os.geteuid() != 0:
+        print("error: uninstall-service needs sudo (system scope).", file=sys.stderr)
+        return 1
+
+    if SYSTEM_UNIT_PATH.exists() and is_package_owned_unit(SYSTEM_UNIT_PATH):
+        print(
+            "error: this unit is owned by a distro package. Use apt purge / "
+            "dnf remove to uninstall.",
+            file=sys.stderr,
+        )
+        return 1
+
+    subprocess.run(
+        ["systemctl", "disable", "--now", SERVICE_NAME],
+        capture_output=True, text=True, check=False,
+    )
+    if SYSTEM_UNIT_PATH.exists():
+        SYSTEM_UNIT_PATH.unlink()
+    subprocess.run(["systemctl", "daemon-reload"], check=True)
+
+    if purge:
+        if SYSTEM_CONFIG_DIR.exists():
+            shutil.rmtree(SYSTEM_CONFIG_DIR)
+        if SYSTEM_STATE_DIR.exists():
+            shutil.rmtree(SYSTEM_STATE_DIR)
+        print("Uninstalled + purged config and state.")
+    else:
+        print("Uninstalled. Config and state preserved.")
+    return 0
+
+
+def uninstall_service_user(purge: bool) -> int:
+    """Remove the user-scope systemd unit and (optionally) user config/state."""
+    xdg = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
+    unit_path = xdg / "systemd" / "user" / SERVICE_NAME
+
+    subprocess.run(
+        ["systemctl", "--user", "disable", "--now", SERVICE_NAME],
+        capture_output=True, text=True, check=False,
+    )
+    if unit_path.exists():
+        unit_path.unlink()
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+
+    if purge:
+        import platformdirs
+        cfg = platformdirs.user_config_path("eth-validator-stats")
+        state = platformdirs.user_data_path("eth-validator-stats")
+        if cfg.exists():
+            shutil.rmtree(cfg)
+        if state.exists():
+            shutil.rmtree(state)
+        print("Uninstalled + purged config and state.")
+    else:
+        print("Uninstalled. Config and state preserved.")
+    return 0

@@ -249,3 +249,94 @@ def test_install_service_user_refuses_if_unit_exists_without_force(monkeypatch, 
     err = capsys.readouterr().err
     assert rc == 1
     assert "--force" in err
+
+
+def test_uninstall_service_system_refuses_without_sudo(monkeypatch, capsys):
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 1000)
+    rc = svc.uninstall_service_system(purge=False)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "sudo" in err.lower()
+
+
+def test_uninstall_service_system_refuses_if_unit_is_package_owned(
+    monkeypatch, capsys, tmp_path
+):
+    fake_unit = tmp_path / svc.SERVICE_NAME
+    fake_unit.write_text("[Unit]\n")
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(svc, "SYSTEM_UNIT_PATH", fake_unit)
+    monkeypatch.setattr(svc, "is_package_owned_unit", lambda p: True)
+    rc = svc.uninstall_service_system(purge=False)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "apt" in err.lower() or "dnf" in err.lower()
+
+
+def test_uninstall_service_system_removes_unit_and_runs_daemon_reload(
+    monkeypatch, tmp_path
+):
+    fake_unit = tmp_path / svc.SERVICE_NAME
+    fake_unit.write_text("[Unit]\n")
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(svc, "SYSTEM_UNIT_PATH", fake_unit)
+    monkeypatch.setattr(svc, "is_package_owned_unit", lambda p: False)
+    monkeypatch.setattr(svc, "SYSTEM_CONFIG_DIR", tmp_path / "etc")
+    monkeypatch.setattr(svc, "SYSTEM_STATE_DIR", tmp_path / "var")
+
+    calls: list = []
+    monkeypatch.setattr(
+        svc.subprocess, "run",
+        lambda cmd, *a, **k: (calls.append(cmd), subprocess.CompletedProcess(cmd, 0))[1],
+    )
+
+    rc = svc.uninstall_service_system(purge=False)
+    assert rc == 0
+    assert not fake_unit.exists()
+    cmd_strs = [" ".join(c) for c in calls]
+    assert any("disable" in s for s in cmd_strs)
+    assert any("daemon-reload" in s for s in cmd_strs)
+
+
+def test_uninstall_service_system_purge_removes_etc_and_var_lib(
+    monkeypatch, tmp_path
+):
+    fake_unit = tmp_path / svc.SERVICE_NAME
+    fake_unit.write_text("[Unit]\n")
+    fake_etc = tmp_path / "etc" / "eth-validator-stats"
+    fake_etc.mkdir(parents=True)
+    (fake_etc / "config.yml").write_text("test")
+    fake_var = tmp_path / "var" / "lib" / "eth-validator-stats"
+    fake_var.mkdir(parents=True)
+    (fake_var / "state.json").write_text("{}")
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(svc, "SYSTEM_UNIT_PATH", fake_unit)
+    monkeypatch.setattr(svc, "is_package_owned_unit", lambda p: False)
+    monkeypatch.setattr(svc, "SYSTEM_CONFIG_DIR", fake_etc)
+    monkeypatch.setattr(svc, "SYSTEM_STATE_DIR", fake_var)
+    monkeypatch.setattr(svc.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a[0], 0))
+
+    rc = svc.uninstall_service_system(purge=True)
+    assert rc == 0
+    assert not fake_etc.exists()
+    assert not fake_var.exists()
+
+
+def test_uninstall_service_user_removes_unit_and_runs_daemon_reload(monkeypatch, tmp_path):
+    unit_path = tmp_path / "config" / "systemd" / "user" / svc.SERVICE_NAME
+    unit_path.parent.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text("[Unit]\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setattr(svc.os, "geteuid", lambda: 1000)
+
+    calls: list = []
+    monkeypatch.setattr(
+        svc.subprocess, "run",
+        lambda cmd, *a, **k: (calls.append(cmd), subprocess.CompletedProcess(cmd, 0))[1],
+    )
+
+    rc = svc.uninstall_service_user(purge=False)
+    assert rc == 0
+    assert not unit_path.exists()
+    cmd_strs = [" ".join(c) for c in calls]
+    assert any("--user" in s and "disable" in s for s in cmd_strs)
