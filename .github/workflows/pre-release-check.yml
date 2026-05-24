@@ -6,6 +6,14 @@ on:
     branches: [main]
 
 jobs:
+  version-consistency:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all pinned version references agree
+        run: ./scripts/bump.sh --verify
+
   tests:
     name: Unit tests
     runs-on: ubuntu-latest

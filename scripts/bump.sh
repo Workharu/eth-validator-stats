@@ -1,26 +1,89 @@
 #!/usr/bin/env bash
-# Bump the project version across every file that pins it.
+# Manage the project version across every file that pins it.
 #
-# Usage:   scripts/bump.sh <new-version>
-# Example: scripts/bump.sh 0.3.2
+# Usage:
+#   scripts/bump.sh <new-version>   # bump to <new-version>
+#   scripts/bump.sh --verify        # check that all pinned files agree
 #
-# Updates: pyproject.toml, packaging/rpm/eth-validator-stats.spec (Version:
-#          field only), README.md (install-snippet filenames), uv.lock.
-# Skips:   the %changelog section in the rpm spec and debian/changelog —
-#          those need a human-written release notes entry. The script
-#          reminds you afterwards.
+# Bump mode updates: pyproject.toml, packaging/rpm/eth-validator-stats.spec
+#   (Version: field only), README.md (install-snippet filenames), uv.lock.
+#   Skips:   the %changelog section in the rpm spec and debian/changelog —
+#            those need a human-written release notes entry. The script
+#            reminds you afterwards.
+#
+# Verify mode reads the version from each pinned file and exits 0 if they
+#   all agree, 1 with a mismatch report otherwise. CI runs this on every
+#   push (pre-release-check.yml) so drift is caught before tagging.
 
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
-    echo "usage: $0 <new-version>" >&2
-    echo "example: $0 0.3.2" >&2
+    echo "usage: $0 <new-version>     # bump" >&2
+    echo "       $0 --verify          # check pinned files agree" >&2
     exit 64
 fi
 
-NEW=$1
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
+
+# Read the version declared by each file that pins it. Echoed to stdout
+# as "label\tvalue" lines so verify_versions can present them as a table.
+read_versions() {
+    local PY UVL SPEC DEB README_DEB README_RPM
+    PY=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+    UVL=$(grep -A1 '^name = "eth-validator-stats"$' uv.lock \
+            | grep -E '^version = ' | head -1 \
+            | sed -E 's/version = "([^"]+)"/\1/')
+    SPEC=$(grep -E '^Version:' packaging/rpm/eth-validator-stats.spec \
+            | head -1 | awk '{print $2}')
+    DEB=$(head -1 packaging/deb/debian/changelog \
+            | sed -E 's/^eth-validator-stats \(([^)-]+)-[0-9]+\).*/\1/')
+    README_DEB=$(grep -oE 'eth-validator-stats_[0-9.]+-1_amd64\.deb' README.md \
+            | head -1 \
+            | sed -E 's/eth-validator-stats_([0-9.]+)-1_amd64\.deb/\1/')
+    README_RPM=$(grep -oE 'eth-validator-stats-[0-9.]+-1\.fc[0-9]+\.x86_64\.rpm' README.md \
+            | head -1 \
+            | sed -E 's/eth-validator-stats-([0-9.]+)-1\.fc[0-9]+\.x86_64\.rpm/\1/')
+    printf "pyproject.toml\t%s\n" "$PY"
+    printf "uv.lock\t%s\n" "$UVL"
+    printf "rpm spec Version:\t%s\n" "$SPEC"
+    printf "deb changelog top entry\t%s\n" "$DEB"
+    printf "README .deb snippet\t%s\n" "$README_DEB"
+    printf "README .rpm snippet\t%s\n" "$README_RPM"
+}
+
+verify_versions() {
+    local table
+    table=$(read_versions)
+    echo "Version references found:"
+    while IFS=$'\t' read -r label value; do
+        printf "  %-28s %s\n" "$label:" "${value:-<missing>}"
+    done <<< "$table"
+
+    # Reference value = pyproject.toml's version.
+    local ref drift
+    ref=$(awk -F'\t' '$1 == "pyproject.toml" { print $2 }' <<< "$table")
+    drift=0
+    while IFS=$'\t' read -r label value; do
+        if [[ "$value" != "$ref" ]]; then drift=1; fi
+    done <<< "$table"
+
+    echo
+    if [[ "$drift" -eq 0 && -n "$ref" ]]; then
+        echo "OK: all version references agree on $ref"
+        return 0
+    else
+        echo "ERROR: version drift detected. Run \`scripts/bump.sh $ref\` to resync (or pass the actual intended version)." >&2
+        return 1
+    fi
+}
+
+if [[ "$1" == "--verify" ]]; then
+    verify_versions
+    exit $?
+fi
+
+NEW=$1
 
 # Semver-ish: MAJOR.MINOR.PATCH, digits only.
 if ! [[ "$NEW" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
