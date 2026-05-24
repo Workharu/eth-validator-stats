@@ -96,6 +96,38 @@ Cron should not invoke `uv run` (it pays the resolver/lock cost every minute). U
 */5 * * * * /path/to/eth-validator-stats/.venv/bin/eth-validator-stats check --missed 3 || notify-send "validator alert"
 ```
 
+### Run as a service (Linux / Windows)
+
+Long-running alternative to cron. The `watch` subcommand loops one check per
+`--interval` (default 60s) until the OS supervisor stops it. systemd (Linux)
+and WinSW (Windows) wrap the process and handle restart-on-failure.
+
+**Linux (no sudo, systemd --user):**
+```bash
+cd packaging/linux
+./install-service.sh
+systemctl --user status eth-validator-stats.service
+```
+
+**Linux (system scope, sudo):**
+```bash
+cd packaging/linux
+sudo ./install-service.sh --system
+```
+
+**Windows (elevated PowerShell):**
+```powershell
+cd packaging\windows
+.\install-service.ps1
+Get-Service eth-validator-stats
+```
+
+See `packaging/linux/README.md` and `packaging/windows/README.md` for full
+details, uninstall instructions, and the Phase 2 distro-package migration
+path. Cron mode (above) continues to work alongside the service unit; the
+two do not conflict, but running both at once will double the load on your
+beacon node.
+
 ### Push notifications (ntfy)
 
 If `ntfy_topic` is set under `alerts:` in `config.yml`, `check` POSTs to that ntfy topic on every **new** alert transition (no spam — see dedup/storm below).
