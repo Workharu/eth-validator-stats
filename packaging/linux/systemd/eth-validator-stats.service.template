@@ -1,0 +1,17 @@
+[Unit]
+Description=eth-validator-stats watcher
+Documentation=https://github.com/privatejava/eth-validator-stats
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@INSTALL_DIR@
+ExecStart=@INSTALL_DIR@/.venv/bin/eth-validator-stats watch
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
