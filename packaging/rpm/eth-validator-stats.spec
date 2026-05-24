@@ -15,12 +15,12 @@ Source0:        %{name}-%{version}.tar.gz
 
 # Not noarch: the bundled venv contains arch-specific binaries (PyYAML's
 # libyaml C extension _yaml.so plus symlinks to the system python).
-BuildRequires:  python3.11
-BuildRequires:  python3.11-devel
 BuildRequires:  systemd-rpm-macros
 BuildRequires:  tar
+BuildRequires:  curl
+# python3.11 is no longer needed at build time — uv downloads a self-contained
+# python-build-standalone interpreter via `uv python install`.
 
-Requires:       python3.11
 Requires(pre):  shadow-utils
 Requires(post): systemd
 Requires(preun): systemd
@@ -50,8 +50,14 @@ mkdir -p %{buildroot}/opt/%{name} \
          %{buildroot}%{_bindir} \
          %{buildroot}%{_unitdir}
 
-# Build the venv at the final runtime path so shebangs resolve.
-python3.11 -m venv %{buildroot}/opt/%{name}/venv
+# Bundle a self-contained python-build-standalone interpreter via uv.
+# This drops the runtime dependency on system python3.11.
+uv python install --install-dir %{buildroot}/opt/%{name}/python 3.11
+
+# Locate the installed interpreter and use it to build the venv.
+PBS_PYTHON=$(find %{buildroot}/opt/%{name}/python -type f -name python3.11 | head -n1)
+test -n "$PBS_PYTHON" || { echo "ERROR: no python3.11 found after uv install"; exit 1; }
+$PBS_PYTHON -m venv --copies %{buildroot}/opt/%{name}/venv
 %{buildroot}/opt/%{name}/venv/bin/pip install --no-cache-dir .
 
 # Drop activation scripts: not needed at runtime (the service ExecStart calls
