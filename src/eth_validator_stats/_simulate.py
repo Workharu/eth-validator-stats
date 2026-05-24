@@ -54,3 +54,26 @@ def build_missed_proposal(idx: int, label: str, *, slot: int = 12345) -> tuple[s
         f"validator {idx}{_label_part(label)} missed proposal at slot {slot}",
         f"✗ no block produced at slot {slot}",
     )
+
+
+def build_blind() -> tuple[str, str]:
+    return ("MONITOR BLIND", "beacon node unreachable: simulated")
+
+
+def build_recovered() -> tuple[str, str]:
+    return ("MONITOR RECOVERED", "beacon node reachable again")
+
+
+# Scope tells cmd_simulate whether to resolve a validator before calling
+# the builder. Validator-scoped builders take (idx, label, **kwargs);
+# global-scoped builders take just **kwargs (currently none).
+EVENTS: dict[str, tuple[Callable, str]] = {
+    "missed-attestation": (build_missed_attestation, "validator"),
+    "offline": (build_offline, "validator"),
+    "withdrawal": (build_withdrawal, "validator"),
+    "proposing-soon": (build_proposing_soon, "validator"),
+    "proposed": (build_proposed, "validator"),
+    "missed-proposal": (build_missed_proposal, "validator"),
+    "blind": (build_blind, "global"),
+    "recovered": (build_recovered, "global"),
+}

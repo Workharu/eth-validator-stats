@@ -69,3 +69,43 @@ def test_build_missed_proposal_default_slot():
     title, body = build_missed_proposal(1234, "home-1")
     assert title == "validator 1234 home-1 missed proposal at slot 12345"
     assert body == "✗ no block produced at slot 12345"
+
+
+from eth_validator_stats._simulate import (
+    EVENTS,
+    build_blind,
+    build_recovered,
+)
+
+
+def test_build_blind():
+    title, body = build_blind()
+    assert title == "MONITOR BLIND"
+    assert body == "beacon node unreachable: simulated"
+
+
+def test_build_recovered():
+    title, body = build_recovered()
+    assert title == "MONITOR RECOVERED"
+    assert body == "beacon node reachable again"
+
+
+def test_events_table_has_all_eight_events():
+    expected = {
+        "missed-attestation", "offline", "withdrawal",
+        "proposing-soon", "proposed", "missed-proposal",
+        "blind", "recovered",
+    }
+    assert set(EVENTS.keys()) == expected
+
+
+def test_events_table_scopes_correct():
+    validator_scoped = {
+        "missed-attestation", "offline", "withdrawal",
+        "proposing-soon", "proposed", "missed-proposal",
+    }
+    for name, (_, scope) in EVENTS.items():
+        if name in validator_scoped:
+            assert scope == "validator", f"{name} should be validator-scoped"
+        else:
+            assert scope == "global", f"{name} should be global-scoped"
