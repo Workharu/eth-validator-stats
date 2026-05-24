@@ -17,21 +17,57 @@ Shows: validator index, label, status, balance (ETH), and the last 5 attestation
 
 ## Install
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+**Debian / Ubuntu** (Debian 12+, Ubuntu 22.04+):
+
+```bash
+# Make sure python3.11 is available
+sudo apt install -y python3.11
+
+# Install the package (downloaded from the GitHub Releases page)
+sudo dpkg -i eth-validator-stats_0.2.0_all.deb
+
+# Configure
+sudo eth-validator-stats init --system
+
+# The service auto-starts when the config exists
+sudo systemctl status eth-validator-stats
+```
+
+**Fedora / RHEL / Rocky / Alma 9+:**
+
+```bash
+# Make sure python3.11 is available
+sudo dnf install -y python3.11
+
+# Install the package
+sudo dnf install eth-validator-stats-0.2.0-1.noarch.rpm
+
+# Configure (RPMs don't auto-start per Fedora policy)
+sudo eth-validator-stats init --system
+sudo systemctl start eth-validator-stats
+```
+
+**Any OS with Python 3.11+ (PyPI):**
+
+```bash
+pipx install eth-validator-stats
+eth-validator-stats init        # per-user config at ~/.config/eth-validator-stats/
+```
+
+`pipx` creates an isolated venv automatically. Plain `pip install` also works inside your own venv.
+
+## Develop locally
+
+If you want to hack on the code instead of installing:
 
 ```bash
 git clone <this-repo> eth-validator-stats
 cd eth-validator-stats
-uv sync                  # creates .venv and installs from uv.lock
-```
-
-Run the CLI via `uv run`:
-
-```bash
+uv sync
 uv run eth-validator-stats status
 ```
 
-Or activate the venv directly (`source .venv/bin/activate`) and call `eth-validator-stats` plain.
+See [`packaging/linux/README.md`](packaging/linux/README.md) for the Phase 1 manual systemd install path — still supported for users who want to run from source without committing to a distro package.
 
 ## Setup
 
