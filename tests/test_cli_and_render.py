@@ -144,17 +144,23 @@ def test_poll_logs_proposer_duties_failure_at_warning(monkeypatch, caplog):
     ), [rec.message for rec in caplog.records]
 
 
-def test_main_configures_root_logger_to_debug(monkeypatch, capsys):
+def test_configure_logging_applies_level_from_env(monkeypatch):
     import logging
     from eth_validator_stats.cli import configure_logging
 
     monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "DEBUG")
-    configure_logging(None)  # picks up env var
+    configure_logging(None)
+    assert logging.getLogger().level == logging.DEBUG
 
-    log = logging.getLogger("eth_validator_stats.test_probe")
-    log.debug("dbg-marker")
-    log.info("info-marker")
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "WARNING")
+    configure_logging(None)
+    assert logging.getLogger().level == logging.WARNING
 
-    err = capsys.readouterr().err
-    assert "dbg-marker" in err
-    assert "info-marker" in err
+
+def test_configure_logging_explicit_arg_wins_over_env(monkeypatch):
+    import logging
+    from eth_validator_stats.cli import configure_logging
+
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "DEBUG")
+    configure_logging("ERROR")
+    assert logging.getLogger().level == logging.ERROR

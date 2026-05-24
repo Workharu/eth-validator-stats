@@ -378,28 +378,21 @@ def configure_logging(level_name: str | None) -> None:
 
     Resolution order: explicit arg > env var > INFO.
     Output is timestamped UTC, level- and logger-name-tagged, on stderr.
-    Safe to call multiple times; uses force=True to reset handlers.
-    Handlers not writing to sys.stderr/sys.stdout (e.g. pytest caplog) are preserved.
+    Calling more than once is supported — the level is always re-applied,
+    while basicConfig() is a no-op if any handler is already present.
     """
     level_str = level_name or os.environ.get("ETH_VALIDATOR_STATS_LOG_LEVEL") or "INFO"
     level = getattr(logging, level_str.upper(), logging.INFO)
     logging.Formatter.converter = time.gmtime  # UTC timestamps
-    # Preserve handlers not targeting stderr/stdout (e.g. pytest's caplog buffer).
-    root = logging.getLogger()
-    extra_handlers = [
-        h for h in root.handlers
-        if not (isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (sys.stderr, sys.stdout))
-    ]
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%SZ",
         stream=sys.stderr,
-        force=True,
     )
-    for h in extra_handlers:
-        if h not in root.handlers:
-            root.addHandler(h)
+    # basicConfig() is a no-op if handlers already exist (e.g. under pytest).
+    # Re-apply the level explicitly so --log-level still controls verbosity.
+    logging.getLogger().setLevel(level)
 
 
 def build_parser() -> argparse.ArgumentParser:
