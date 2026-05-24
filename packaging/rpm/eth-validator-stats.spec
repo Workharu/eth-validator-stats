@@ -7,7 +7,8 @@ License:        MIT
 URL:            https://github.com/Workharu/eth-validator-stats
 Source0:        %{name}-%{version}.tar.gz
 
-BuildArch:      noarch
+# Not noarch: the bundled venv contains arch-specific binaries (PyYAML's
+# libyaml C extension _yaml.so plus symlinks to the system python).
 BuildRequires:  python3.11
 BuildRequires:  python3.11-devel
 BuildRequires:  systemd-rpm-macros
@@ -36,9 +37,9 @@ to configure.
 # nothing to compile
 
 %install
-# Only stage dirs the package will own. /etc/%{name} and /var/lib/%{name}
-# are created in %post so RPM doesn't own them — that way user-created
-# files inside them survive `rpm -e` cleanly.
+# Only stage dirs the package will own. The /etc and /var/lib directories
+# are created in the post-install scriptlet so RPM doesn't own them — that
+# way user-created files inside them survive `rpm -e` cleanly.
 mkdir -p %{buildroot}/opt/%{name} \
          %{buildroot}%{_bindir} \
          %{buildroot}%{_unitdir}
@@ -105,8 +106,8 @@ getent passwd eth-validator-stats >/dev/null || \
 exit 0
 
 %post
-# Create config + state dirs here (not in %install) so RPM doesn't own them,
-# which means user-created files inside survive `rpm -e`.
+# Create config + state dirs here (not in the install section) so RPM doesn't
+# own them, which means user-created files inside survive `rpm -e`.
 mkdir -p /etc/%{name} /var/lib/%{name}
 chown -R eth-validator-stats:eth-validator-stats /etc/%{name} /var/lib/%{name}
 chmod 0750 /etc/%{name} /var/lib/%{name}
@@ -137,9 +138,9 @@ fi
 /opt/%{name}/venv
 %{_bindir}/%{name}
 %{_unitdir}/%{name}.service
-# /etc/%{name} and /var/lib/%{name} are intentionally NOT listed here:
-# %post creates them so the package does not own the dirs (preserving any
-# user-created contents on uninstall).
+# The config and state directories are intentionally NOT listed here:
+# the post-install scriptlet creates them so the package does not own the
+# dirs (preserving any user-created contents on uninstall).
 
 %changelog
 * Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.2.0-1

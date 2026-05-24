@@ -38,7 +38,8 @@ cp "$RPM_DIR/eth-validator-stats.spec" "$BUILD_DIR/SPECS/"
 rpmbuild --define "_topdir $BUILD_DIR" \
          -bb "$BUILD_DIR/SPECS/eth-validator-stats.spec"
 
-# Move resulting .rpm
-mv "$BUILD_DIR"/RPMS/noarch/eth-validator-stats-*.rpm "$DIST_DIR/"
+# Move resulting .rpm (the package is arch-specific because the bundled
+# venv contains a C extension; rpmbuild writes it under RPMS/<arch>/).
+mv "$BUILD_DIR"/RPMS/*/eth-validator-stats-*.rpm "$DIST_DIR/"
 
 echo ">>> built $(ls $DIST_DIR/eth-validator-stats-*.rpm)"
