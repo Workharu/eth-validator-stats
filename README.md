@@ -23,7 +23,7 @@ Shows: validator index, label, status, balance (ETH), and the last 5 attestation
 
 ```bash
 sudo apt install -y python3.11-venv
-sudo apt install -y ./eth-validator-stats_0.2.0-1_all.deb
+sudo apt install -y ./eth-validator-stats_0.2.1-1_all.deb
 sudo eth-validator-stats init --system
 sudo systemctl status eth-validator-stats
 ```
@@ -37,7 +37,7 @@ sudo systemctl status eth-validator-stats
 sudo add-apt-repository -y ppa:deadsnakes/ppa
 sudo apt update
 sudo apt install -y python3.11 python3.11-venv
-sudo apt install -y ./eth-validator-stats_0.2.0-1_all.deb
+sudo apt install -y ./eth-validator-stats_0.2.1-1_all.deb
 sudo eth-validator-stats init --system
 sudo systemctl status eth-validator-stats
 ```
@@ -51,7 +51,7 @@ sudo systemctl status eth-validator-stats
 
 ```bash
 sudo dnf install -y python3.11
-sudo dnf install ./eth-validator-stats-0.2.0-1.fc40.x86_64.rpm
+sudo dnf install ./eth-validator-stats-0.2.1-1.fc40.x86_64.rpm
 sudo eth-validator-stats init --system
 sudo systemctl start eth-validator-stats   # Fedora policy: doesn't auto-start
 ```
