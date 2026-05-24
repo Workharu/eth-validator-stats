@@ -106,9 +106,15 @@ jobs:
             rpm-build systemd-rpm-macros tar git curl
 
       - name: Install uv inside the container
+        # Install to /usr/local/bin (already on the default PATH) so we don't
+        # have to touch $GITHUB_PATH. Modifying $GITHUB_PATH inside a
+        # container job has broken `docker exec`'s ability to find `sh` for
+        # subsequent steps on fedora:40 (PATH gets replaced rather than
+        # prepended), so we sidestep the mechanism entirely.
         run: |
           curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          install -m 0755 "$HOME/.local/bin/uv"   /usr/local/bin/uv
+          install -m 0755 "$HOME/.local/bin/uvx"  /usr/local/bin/uvx
 
       - name: Build .rpm
         run: ./packaging/rpm/build-rpm.sh
