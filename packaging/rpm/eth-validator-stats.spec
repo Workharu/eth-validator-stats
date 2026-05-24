@@ -12,6 +12,14 @@
 # $ORIGIN at runtime. check-rpaths is too strict to allow a sealed bundle.
 %global __brp_check_rpaths %{nil}
 
+# Disable the brp-mangle-shebangs step. The PBS stdlib ships some files
+# (e.g. encodings/rot_13.py) with `#!/usr/bin/env python` (no `3`), which
+# Fedora's strict shebang policy treats as ambiguous and aborts on. The
+# stdlib scripts are never invoked as executables in our deployment — the
+# bundled python interpreter loads them as modules — so the shebang text
+# is purely cosmetic. Disable the policy for the sealed bundle.
+%global __brp_mangle_shebangs %{nil}
+
 Name:           eth-validator-stats
 Version:        0.3.0
 Release:        1%{?dist}
