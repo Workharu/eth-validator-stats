@@ -254,3 +254,37 @@ def test_cmd_simulate_notifier_raises_exits_1(tmp_path, monkeypatch, capsys):
     assert rc == 1
     err = capsys.readouterr().err
     assert "simulate failed" in err.lower() or "500" in err
+
+
+def test_simulate_end_to_end_via_main_hits_real_notifier(tmp_path, monkeypatch, capsys):
+    """Drive `main(['simulate', 'missed-attestation'])` end-to-end. Inject a
+    MockTransport into the real NtfyNotifier by monkey-patching the class
+    at the cli import site so the POST is captured without hitting ntfy.sh.
+    """
+    import httpx
+    from eth_validator_stats import cli as cli_mod
+    from eth_validator_stats.alerts import NtfyNotifier as RealNtfyNotifier
+
+    v = ConfigEntry(identifier="42", label="end2end", pubkey=None, index=42)
+    _cfg_with(tmp_path, monkeypatch, validators=[v])
+
+    captured: list[tuple[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append((request.headers.get("title", ""), request.content.decode()))
+        return httpx.Response(200, text="ok")
+
+    transport = httpx.MockTransport(handler)
+
+    def _factory(topic_url, *, timeout=5.0, raise_on_error=False):
+        return RealNtfyNotifier(
+            topic_url, timeout=timeout, transport=transport, raise_on_error=raise_on_error,
+        )
+
+    monkeypatch.setattr(cli_mod, "NtfyNotifier", _factory)
+
+    rc = cli_mod.main(["simulate", "missed-attestation"])
+    assert rc == 0
+    assert captured == [("validator 42 end2end", "MISSED_ATTESTATIONS last=2")]
+    out = capsys.readouterr().out
+    assert "sent:" in out
