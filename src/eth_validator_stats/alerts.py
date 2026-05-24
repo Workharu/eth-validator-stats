@@ -249,6 +249,32 @@ def process_proposal_outcomes(
     return results
 
 
+def prune_scheduled_proposals(
+    state: dict,
+    current_slot: int,
+    keep_slots: int = 1000,
+) -> int:
+    """Drop verified proposals whose slot is older than `current_slot - keep_slots`.
+    Unverified proposals are always kept (they need outcome verification).
+    Returns the total number of entries removed.
+    """
+    if current_slot <= keep_slots:
+        return 0
+    threshold = current_slot - keep_slots
+    removed = 0
+    for record in state.get("validators", {}).values():
+        proposals = record.get("scheduled_proposals", [])
+        if not proposals:
+            continue
+        kept = [
+            p for p in proposals
+            if not (p.get("verified") and int(p.get("slot", 0)) < threshold)
+        ]
+        removed += len(proposals) - len(kept)
+        record["scheduled_proposals"] = kept
+    return removed
+
+
 def process_withdrawals(
     state: dict,
     configured_indices: set[int],

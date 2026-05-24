@@ -19,6 +19,7 @@ from .alerts import (
     process_upcoming_proposals,
     process_validator_alerts,
     process_withdrawals,
+    prune_scheduled_proposals,
     record_scheduled_proposals,
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
@@ -291,6 +292,8 @@ def cmd_check(args: argparse.Namespace) -> int:
                 process_proposal_outcomes(state, current_slot, bc.get_block_header_at_slot, notifier)
         except (httpx.HTTPError, OSError) as e:
             sys.stderr.write(f"warning: proposal outcome verification failed: {e}\n")
+        # Drop verified proposals older than ~1000 slots (~3.3h) to keep state.json bounded.
+        prune_scheduled_proposals(state, current_slot)
 
     save_state(state_path(), state)
 

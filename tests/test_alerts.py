@@ -16,6 +16,7 @@ from eth_validator_stats.alerts import (
     process_upcoming_proposals,
     process_validator_alerts,
     process_withdrawals,
+    prune_scheduled_proposals,
     record_scheduled_proposals,
 )
 
@@ -404,3 +405,44 @@ def test_proposal_outcome_fetch_error_leaves_unverified():
     assert out == []
     assert state["validators"]["1"]["scheduled_proposals"][0]["verified"] is False
     assert notif.sent == []
+
+
+# --- pruning ----------------------------------------------------------------
+
+def test_prune_drops_old_verified_proposals():
+    state = {"validators": {"1": {"scheduled_proposals": [
+        {"slot": 100, "alerted": True, "verified": True},     # old + verified → drop
+        {"slot": 1500, "alerted": True, "verified": True},    # within window → keep
+        {"slot": 200, "alerted": True, "verified": False},    # unverified → keep
+    ]}}}
+    removed = prune_scheduled_proposals(state, current_slot=2000, keep_slots=1000)
+    assert removed == 1
+    remaining = state["validators"]["1"]["scheduled_proposals"]
+    slots_remaining = sorted(p["slot"] for p in remaining)
+    assert slots_remaining == [200, 1500]
+
+
+def test_prune_no_op_when_current_slot_low():
+    """If we haven't been running long enough to cross the keep-window, prune is a no-op."""
+    state = {"validators": {"1": {"scheduled_proposals": [
+        {"slot": 100, "alerted": True, "verified": True},
+    ]}}}
+    removed = prune_scheduled_proposals(state, current_slot=500, keep_slots=1000)
+    assert removed == 0
+    assert len(state["validators"]["1"]["scheduled_proposals"]) == 1
+
+
+def test_prune_keeps_unverified_regardless_of_age():
+    """Unverified proposals are always preserved — they still need outcome lookup."""
+    state = {"validators": {"1": {"scheduled_proposals": [
+        {"slot": 50, "alerted": True, "verified": False},  # ancient but still unverified
+    ]}}}
+    removed = prune_scheduled_proposals(state, current_slot=10_000, keep_slots=1000)
+    assert removed == 0
+    assert state["validators"]["1"]["scheduled_proposals"][0]["slot"] == 50
+
+
+def test_prune_handles_validator_without_scheduled_proposals():
+    state = {"validators": {"1": {"label": "v1"}}}  # no scheduled_proposals key
+    removed = prune_scheduled_proposals(state, current_slot=5000, keep_slots=1000)
+    assert removed == 0
