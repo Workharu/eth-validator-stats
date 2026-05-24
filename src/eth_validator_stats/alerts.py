@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Callable, Protocol
 
 import httpx
 
@@ -130,6 +130,106 @@ def process_validator_alerts(
         notifier.send(f"validator {idx}{label_part} RECOVERED", "back to active_ongoing")
 
     return new_alerts, recoveries
+
+
+HeaderFetcher = Callable[[int], "int | None"]
+
+
+def record_scheduled_proposals(
+    state: dict,
+    duties: list[tuple[int, int]],
+    configured_indices: set[int],
+) -> None:
+    """Persist upcoming proposer duties into per-validator state. Idempotent."""
+    vstate = state.setdefault("validators", {})
+    for slot, validator_index in duties:
+        if validator_index not in configured_indices:
+            continue
+        record = vstate.setdefault(str(validator_index), {})
+        proposals = record.setdefault("scheduled_proposals", [])
+        if any(int(p.get("slot", -1)) == slot for p in proposals):
+            continue
+        proposals.append({"slot": int(slot), "alerted": False, "verified": False})
+
+
+def process_upcoming_proposals(
+    state: dict,
+    current_slot: int,
+    seconds_per_slot: int,
+    slots_per_epoch: int,
+    lookahead_epochs: int,
+    notifier: Notifier,
+) -> list[tuple[int, str, int]]:
+    """Notify once per scheduled proposal that falls within the lookahead window."""
+    fired: list[tuple[int, str, int]] = []
+    window_slots = lookahead_epochs * slots_per_epoch
+    vstate = state.setdefault("validators", {})
+    for idx_str, record in vstate.items():
+        try:
+            idx = int(idx_str)
+        except ValueError:
+            continue
+        label = record.get("label", "")
+        for prop in record.get("scheduled_proposals", []):
+            slot = int(prop.get("slot", -1))
+            if slot < current_slot or slot > current_slot + window_slots:
+                continue
+            if prop.get("alerted"):
+                continue
+            slots_away = slot - current_slot
+            mins_away = (slots_away * seconds_per_slot) // 60
+            label_part = f" {label}" if label else ""
+            notifier.send(
+                f"validator {idx}{label_part} proposing soon",
+                f"slot {slot} (~{mins_away} min away)",
+            )
+            prop["alerted"] = True
+            fired.append((idx, label, slot))
+    return fired
+
+
+def process_proposal_outcomes(
+    state: dict,
+    current_slot: int,
+    fetch_header_fn: HeaderFetcher,
+    notifier: Notifier,
+) -> list[tuple[int, str, int, bool]]:
+    """For each past, unverified scheduled proposal, query the canonical header
+    and notify success or miss. Mark verified."""
+    results: list[tuple[int, str, int, bool]] = []
+    vstate = state.setdefault("validators", {})
+    for idx_str, record in vstate.items():
+        try:
+            idx = int(idx_str)
+        except ValueError:
+            continue
+        label = record.get("label", "")
+        for prop in record.get("scheduled_proposals", []):
+            if prop.get("verified"):
+                continue
+            slot = int(prop.get("slot", -1))
+            if slot >= current_slot:
+                continue
+            try:
+                proposer_index = fetch_header_fn(slot)
+            except Exception:
+                continue
+            produced = proposer_index == idx
+            label_part = f" {label}" if label else ""
+            if produced:
+                notifier.send(
+                    f"validator {idx}{label_part} ✓ proposed slot {slot}",
+                    "block landed",
+                )
+            else:
+                notifier.send(
+                    f"validator {idx}{label_part} ✗ missed proposal at slot {slot}",
+                    "no block produced at this slot",
+                )
+            prop["verified"] = True
+            prop["produced"] = produced
+            results.append((idx, label, slot, produced))
+    return results
 
 
 def process_withdrawals(

@@ -12,8 +12,11 @@ from eth_validator_stats.alerts import (
     clear_blind_if_recovered,
     make_notifier,
     process_blind,
+    process_proposal_outcomes,
+    process_upcoming_proposals,
     process_validator_alerts,
     process_withdrawals,
+    record_scheduled_proposals,
 )
 
 
@@ -277,3 +280,103 @@ def test_withdrawal_skipped_for_unconfigured_validator():
     notif = FakeNotifier()
     out = process_withdrawals(state, set(), notif, _cfg())  # validator 1 not configured
     assert out == []
+
+
+# --- proposals --------------------------------------------------------------
+
+def test_record_scheduled_proposals_persists_only_configured_validators():
+    state: dict = {}
+    record_scheduled_proposals(
+        state, [(3200, 1), (3210, 2), (3220, 999)], {1, 2},
+    )
+    v1 = state["validators"]["1"]["scheduled_proposals"]
+    v2 = state["validators"]["2"]["scheduled_proposals"]
+    assert v1 == [{"slot": 3200, "alerted": False, "verified": False}]
+    assert v2 == [{"slot": 3210, "alerted": False, "verified": False}]
+    assert "999" not in state["validators"]
+
+
+def test_record_scheduled_proposals_is_idempotent():
+    state: dict = {}
+    record_scheduled_proposals(state, [(3200, 1)], {1})
+    record_scheduled_proposals(state, [(3200, 1)], {1})
+    assert len(state["validators"]["1"]["scheduled_proposals"]) == 1
+
+
+def test_upcoming_proposal_within_lookahead_fires_once():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 3220, "alerted": False, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_upcoming_proposals(state, 3200, 12, 32, 1, notif)
+    assert len(out) == 1
+    assert "proposing soon" in notif.sent[0][0]
+    assert "slot 3220" in notif.sent[0][1]
+    notif.sent.clear()
+    process_upcoming_proposals(state, 3200, 12, 32, 1, notif)
+    assert notif.sent == []
+
+
+def test_upcoming_proposal_outside_window_no_fire():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 5000, "alerted": False, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_upcoming_proposals(state, 3200, 12, 32, 1, notif)
+    assert out == []
+    assert notif.sent == []
+
+
+def test_upcoming_proposal_already_passed_no_fire():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 3100, "alerted": False, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_upcoming_proposals(state, 3200, 12, 32, 1, notif)
+    assert out == []
+
+
+def test_proposal_outcome_success():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 3100, "alerted": True, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_proposal_outcomes(state, 3200, lambda s: 1, notif)
+    assert out == [(1, "v1", 3100, True)]
+    assert "✓ proposed slot 3100" in notif.sent[0][0]
+    assert state["validators"]["1"]["scheduled_proposals"][0]["verified"] is True
+    assert state["validators"]["1"]["scheduled_proposals"][0]["produced"] is True
+
+
+def test_proposal_outcome_missed_slot_returns_none_header():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 3100, "alerted": True, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_proposal_outcomes(state, 3200, lambda s: None, notif)
+    assert out == [(1, "v1", 3100, False)]
+    assert "✗ missed proposal" in notif.sent[0][0]
+
+
+def test_proposal_outcome_skips_already_verified():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 3100, "alerted": True, "verified": True}]}}}
+    notif = FakeNotifier()
+    out = process_proposal_outcomes(state, 3200, lambda s: 1, notif)
+    assert out == []
+    assert notif.sent == []
+
+
+def test_proposal_outcome_future_slot_skipped():
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 5000, "alerted": False, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_proposal_outcomes(state, 3200, lambda s: 1, notif)
+    assert out == []
+
+
+def test_proposal_outcome_fetch_error_leaves_unverified():
+    def boom(s):
+        raise ConnectionError("nope")
+    state = {"validators": {"1": {"label": "v1", "scheduled_proposals": [
+        {"slot": 3100, "alerted": True, "verified": False}]}}}
+    notif = FakeNotifier()
+    out = process_proposal_outcomes(state, 3200, boom, notif)
+    assert out == []
+    assert state["validators"]["1"]["scheduled_proposals"][0]["verified"] is False
+    assert notif.sent == []
