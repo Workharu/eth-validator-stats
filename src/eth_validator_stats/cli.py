@@ -113,6 +113,10 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
 
         key = str(info_v.index)
         record = vstate.setdefault(key, {})
+        # Snapshot the prior balance so process_withdrawals() can detect drops.
+        prev_balance = record.get("last_balance_gwei")
+        if prev_balance is not None:
+            record["previous_balance_gwei"] = int(prev_balance)
         record["pubkey"] = info_v.pubkey
         record["label"] = entry.label
         record["last_status"] = info_v.status

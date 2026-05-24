@@ -130,3 +130,49 @@ def process_validator_alerts(
         notifier.send(f"validator {idx}{label_part} RECOVERED", "back to active_ongoing")
 
     return new_alerts, recoveries
+
+
+def process_withdrawals(
+    state: dict,
+    configured_indices: set[int],
+    notifier: Notifier,
+    cfg: AlertsConfig,
+) -> list[tuple[int, str, int]]:
+    """Detect balance drops on active validators and notify.
+
+    Compares `previous_balance_gwei` (set by poll() before overwriting last_balance_gwei)
+    to the current `last_balance_gwei`. A drop >= cfg.withdrawal_threshold_gwei on an
+    active_ongoing validator is treated as a withdrawal. Returns [(idx, label, drop_gwei)].
+    """
+    detected: list[tuple[int, str, int]] = []
+    vstate = state.get("validators", {})
+    for idx_str, record in vstate.items():
+        try:
+            idx = int(idx_str)
+        except ValueError:
+            continue
+        if idx not in configured_indices:
+            continue
+        prev = record.get("previous_balance_gwei")
+        curr = record.get("last_balance_gwei")
+        status = record.get("last_status", "")
+        if prev is None or curr is None:
+            continue
+        if status != "active_ongoing":
+            continue
+        prev_i = int(prev)
+        curr_i = int(curr)
+        if prev_i <= curr_i:
+            continue
+        drop = prev_i - curr_i
+        if drop < cfg.withdrawal_threshold_gwei:
+            continue
+        label = record.get("label", "")
+        detected.append((idx, label, drop))
+        eth = drop / 1_000_000_000
+        label_part = f" {label}" if label else ""
+        notifier.send(
+            f"validator {idx}{label_part} withdrawal",
+            f"{eth:.4f} ETH withdrawn",
+        )
+    return detected

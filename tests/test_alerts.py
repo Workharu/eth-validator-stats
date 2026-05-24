@@ -13,6 +13,7 @@ from eth_validator_stats.alerts import (
     make_notifier,
     process_blind,
     process_validator_alerts,
+    process_withdrawals,
 )
 
 
@@ -204,3 +205,75 @@ def test_empty_topic_is_silent_noop():
     transport = httpx.MockTransport(handler)
     n = NtfyNotifier("", transport=transport)
     n.send("t", "b")  # silent no-op
+
+
+# --- withdrawals -------------------------------------------------------------
+
+def _w_state(prev_gwei, curr_gwei, status="active_ongoing", label="v1"):
+    return {
+        "validators": {
+            "1": {
+                "previous_balance_gwei": prev_gwei,
+                "last_balance_gwei": curr_gwei,
+                "last_status": status,
+                "label": label,
+            }
+        }
+    }
+
+
+def test_withdrawal_drop_above_threshold_fires():
+    state = _w_state(prev_gwei=32_050_000_000, curr_gwei=32_000_000_000)  # 0.05 ETH drop
+    notif = FakeNotifier()
+    out = process_withdrawals(state, {1}, notif, _cfg())
+    assert len(out) == 1
+    assert out[0] == (1, "v1", 50_000_000)
+    assert len(notif.sent) == 1
+    assert "withdrawal" in notif.sent[0][0]
+    assert "0.0500 ETH" in notif.sent[0][1]
+
+
+def test_withdrawal_below_threshold_skipped():
+    # threshold 1_000_000 gwei = 0.001 ETH
+    state = _w_state(prev_gwei=32_000_000_000, curr_gwei=31_999_500_000)  # 0.0005 ETH drop
+    notif = FakeNotifier()
+    out = process_withdrawals(state, {1}, notif, _cfg())
+    assert out == []
+    assert notif.sent == []
+
+
+def test_withdrawal_balance_unchanged_no_fire():
+    state = _w_state(prev_gwei=32_000_000_000, curr_gwei=32_000_000_000)
+    notif = FakeNotifier()
+    out = process_withdrawals(state, {1}, notif, _cfg())
+    assert out == []
+
+
+def test_withdrawal_balance_increased_no_fire():
+    state = _w_state(prev_gwei=32_000_000_000, curr_gwei=32_010_000_000)  # earned rewards
+    notif = FakeNotifier()
+    out = process_withdrawals(state, {1}, notif, _cfg())
+    assert out == []
+
+
+def test_withdrawal_skipped_when_status_not_active():
+    """Slashing/exit balance drops are alerted via OFFLINE rule, not withdrawal."""
+    state = _w_state(prev_gwei=32_000_000_000, curr_gwei=16_000_000_000, status="exited_slashed")
+    notif = FakeNotifier()
+    out = process_withdrawals(state, {1}, notif, _cfg())
+    assert out == []
+
+
+def test_withdrawal_skipped_when_previous_missing():
+    """First-ever poll has no previous_balance_gwei yet."""
+    state = {"validators": {"1": {"last_balance_gwei": 32_000_000_000, "last_status": "active_ongoing"}}}
+    notif = FakeNotifier()
+    out = process_withdrawals(state, {1}, notif, _cfg())
+    assert out == []
+
+
+def test_withdrawal_skipped_for_unconfigured_validator():
+    state = _w_state(prev_gwei=32_050_000_000, curr_gwei=32_000_000_000)
+    notif = FakeNotifier()
+    out = process_withdrawals(state, set(), notif, _cfg())  # validator 1 not configured
+    assert out == []
