@@ -1,0 +1,48 @@
+# One-time PyPI setup required before the first run:
+#   1. Create the project on https://pypi.org if it doesn't exist
+#      (the first `uv build` upload via this workflow does this automatically).
+#   2. Add Workharu/eth-validator-stats as a trusted publisher on PyPI:
+#        https://pypi.org/manage/account/publishing/
+#      - Repository owner: Workharu
+#      - Repository name:  eth-validator-stats
+#      - Workflow name:    release.yml
+#      - Environment name: (leave blank)
+#   3. After step 2, tagged releases publish automatically — no API token needed.
+name: release
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write       # for attaching .deb/.rpm to GitHub Releases (added in later tasks)
+  id-token: write       # for PyPI trusted publisher OIDC
+
+jobs:
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel and sdist
+        run: uv build
+
+      - name: Verify tag matches pyproject version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PROJECT_VERSION=$(grep -E '^version = ' pyproject.toml | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+          if [ "$TAG_VERSION" != "$PROJECT_VERSION" ]; then
+            echo "ERROR: git tag $GITHUB_REF_NAME does not match pyproject version $PROJECT_VERSION"
+            exit 1
+          fi
+
+      - name: Publish to PyPI (trusted publisher)
+        uses: pypa/gh-action-pypi-publish@release/v1
