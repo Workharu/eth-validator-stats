@@ -13,6 +13,7 @@ from rich.console import Console
 
 from .alerts import (
     AlertsConfig,
+    NtfyNotifier,
     clear_blind_if_recovered,
     make_notifier,
     process_blind,
@@ -23,6 +24,7 @@ from .alerts import (
     prune_scheduled_proposals,
     record_scheduled_proposals,
 )
+from ._simulate import EVENTS
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
 from .config_io import AppConfig, ConfigEntry, config_path, load_config
 from .onboarding import WizardArgs, run_wizard
@@ -410,6 +412,97 @@ def cmd_init(args: argparse.Namespace) -> int:
     return rc
 
 
+def _resolve_simulate_validator(cfg: AppConfig, requested_idx: int | None) -> ConfigEntry:
+    """Pick a configured validator for simulate.
+
+    Default: first entry. If --validator was passed, find by index.
+    Raises ValueError on mismatch; cmd_simulate converts to exit code + stderr.
+    """
+    if requested_idx is not None:
+        for v in cfg.validators:
+            if v.index == requested_idx:
+                return v
+        raise ValueError(f"no configured validator with index {requested_idx}")
+    first = cfg.validators[0]
+    if first.index is None:
+        raise ValueError(
+            "first configured validator has no resolved index — "
+            "run `eth-validator-stats status` once to populate state, "
+            "or pass --validator <idx> explicitly"
+        )
+    return first
+
+
+def cmd_simulate(args: argparse.Namespace, *, _notifier=None) -> int:
+    """Fire one ntfy push using the exact alert template for the chosen event.
+
+    No state mutation, no cooldown, no dedup — pure send. The `_notifier`
+    kwarg is a test seam; production callers go through argparse which
+    never sets it, so the real NtfyNotifier is constructed below.
+    """
+    cfg = load_config(config_path())
+
+    builder, scope = EVENTS[args.event]
+
+    notifier = _notifier
+    if notifier is None:
+        if not cfg.alerts.ntfy_topic:
+            print(
+                "simulate: no ntfy_topic configured. "
+                "Run `eth-validator-stats init` first, or set alerts.ntfy_topic in config.yml.",
+                file=sys.stderr,
+            )
+            return 1
+        notifier = NtfyNotifier(
+            cfg.alerts.ntfy_topic,
+            timeout=cfg.alerts.request_timeout_s,
+            raise_on_error=True,
+        )
+
+    # Build (title, body) for the event.
+    try:
+        if scope == "validator":
+            v = _resolve_simulate_validator(cfg, args.validator)
+            kwargs = _simulate_kwargs(args)
+            title, body = builder(v.index, v.label, **kwargs)
+        else:
+            title, body = builder()
+    except ValueError as e:
+        print(f"simulate: {e}", file=sys.stderr)
+        return 1
+
+    try:
+        notifier.send(title, body)
+    except Exception as e:
+        print(f"simulate failed: {e}", file=sys.stderr)
+        return 1
+
+    print(f"sent: {title} | {body}")
+    return 0
+
+
+def _simulate_kwargs(args: argparse.Namespace) -> dict:
+    """Pick only the kwargs relevant to the requested event from args.
+
+    Argparse collects every flag on the same Namespace; this filter keeps
+    the builder signatures honest (they don't accept **extra)."""
+    relevant = {
+        "missed-attestation": {"last"},
+        "offline": {"status"},
+        "withdrawal": {"amount_eth"},
+        "proposing-soon": {"slot", "delay"},
+        "proposed": {"slot"},
+        "missed-proposal": {"slot"},
+    }
+    keys = relevant.get(args.event, set())
+    out: dict = {}
+    for k in keys:
+        v = getattr(args, k, None)
+        if v is not None:
+            out[k] = v
+    return out
+
+
 def configure_logging(level_name: str | None) -> None:
     """Configure the root logger once at process start.
 
@@ -527,6 +620,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     from ._install_service import cmd_uninstall_service as _cmd_uninstall_svc
     p_uninstall_svc.set_defaults(func=_cmd_uninstall_svc)
+
+    p_sim = sub.add_parser(
+        "simulate",
+        help="Send one test ntfy push matching a real alert template. State-free.",
+    )
+    p_sim.add_argument(
+        "event",
+        choices=list(EVENTS.keys()),
+        help="Which alert template to fire.",
+    )
+    p_sim.add_argument(
+        "--validator", type=int, default=None,
+        help="Validator index to use (default: first configured).",
+    )
+    p_sim.add_argument("--last", type=int, default=None,
+                       help="missed-attestation: N consecutive misses (default 2).")
+    p_sim.add_argument("--status", default=None,
+                       help="offline: validator status string (default 'slashed').")
+    p_sim.add_argument("--amount-eth", dest="amount_eth", type=float, default=None,
+                       help="withdrawal: ETH amount (default 0.001).")
+    p_sim.add_argument("--slot", type=int, default=None,
+                       help="proposing-soon/proposed/missed-proposal: slot number (default 12345).")
+    p_sim.add_argument("--delay", default=None,
+                       help="proposing-soon: human-readable delay (default '~6 min').")
+    p_sim.set_defaults(func=cmd_simulate)
 
     return parser
 
