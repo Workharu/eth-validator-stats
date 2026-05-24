@@ -269,3 +269,15 @@ def uninstall_service_user(purge: bool) -> int:
     else:
         print("Uninstalled. Config and state preserved.")
     return 0
+
+
+def cmd_install_service(args) -> int:
+    if args.user:
+        return install_service_user(force=args.force)
+    return install_service_system(run_as=args.run_as, force=args.force)
+
+
+def cmd_uninstall_service(args) -> int:
+    if args.user:
+        return uninstall_service_user(purge=args.purge)
+    return uninstall_service_system(purge=args.purge)

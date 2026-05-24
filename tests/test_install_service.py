@@ -340,3 +340,56 @@ def test_uninstall_service_user_removes_unit_and_runs_daemon_reload(monkeypatch,
     assert not unit_path.exists()
     cmd_strs = [" ".join(c) for c in calls]
     assert any("--user" in s and "disable" in s for s in cmd_strs)
+
+
+def test_cli_install_service_dispatches_to_system_by_default(monkeypatch):
+    from eth_validator_stats.cli import main
+
+    called: dict = {}
+    def fake_install_system(run_as, force):
+        called["system"] = (run_as, force)
+        return 0
+    def fake_install_user(force):
+        called["user"] = force
+        return 0
+    monkeypatch.setattr(svc, "install_service_system", fake_install_system)
+    monkeypatch.setattr(svc, "install_service_user", fake_install_user)
+
+    rc = main(["install-service"])
+    assert rc == 0
+    assert called == {"system": (None, False)}
+
+
+def test_cli_install_service_dispatches_to_user_with_flag(monkeypatch):
+    from eth_validator_stats.cli import main
+
+    called: dict = {}
+    monkeypatch.setattr(svc, "install_service_system", lambda *a, **k: 99)
+    monkeypatch.setattr(svc, "install_service_user", lambda force: (called.setdefault("force", force), 0)[1])
+
+    rc = main(["install-service", "--user"])
+    assert rc == 0
+    assert called == {"force": False}
+
+
+def test_cli_install_service_passes_run_as_and_force(monkeypatch):
+    from eth_validator_stats.cli import main
+
+    called: dict = {}
+    def fake_system(run_as, force):
+        called["args"] = (run_as, force)
+        return 0
+    monkeypatch.setattr(svc, "install_service_system", fake_system)
+    rc = main(["install-service", "--run-as", "bob", "--force"])
+    assert rc == 0
+    assert called == {"args": ("bob", True)}
+
+
+def test_cli_uninstall_service_dispatches_to_system_by_default(monkeypatch):
+    from eth_validator_stats.cli import main
+
+    called: dict = {}
+    monkeypatch.setattr(svc, "uninstall_service_system", lambda purge: (called.setdefault("purge", purge), 0)[1])
+    rc = main(["uninstall-service", "--purge"])
+    assert rc == 0
+    assert called == {"purge": True}

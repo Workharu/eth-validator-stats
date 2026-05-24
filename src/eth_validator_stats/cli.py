@@ -491,6 +491,43 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_init.set_defaults(func=cmd_init)
 
+    # install-service / uninstall-service: register a systemd unit pointing at
+    # this entrypoint. Loaded lazily so non-Linux users running --help don't
+    # pay the cost of importing pwd/grp.
+    p_install_svc = sub.add_parser(
+        "install-service",
+        help="Register a systemd unit for the watcher (one-time setup for pipx installs).",
+    )
+    p_install_svc.add_argument(
+        "--user", action="store_true",
+        help="Install as a --user unit (no sudo). Default is system scope (needs sudo).",
+    )
+    p_install_svc.add_argument(
+        "--run-as", default=None,
+        help="System-scope only: override the user the service runs as (default: $SUDO_USER).",
+    )
+    p_install_svc.add_argument(
+        "--force", action="store_true",
+        help="Overwrite an existing unit file even if it is owned by a distro package.",
+    )
+    from ._install_service import cmd_install_service as _cmd_install_svc
+    p_install_svc.set_defaults(func=_cmd_install_svc)
+
+    p_uninstall_svc = sub.add_parser(
+        "uninstall-service",
+        help="Remove the systemd unit registered by `install-service`.",
+    )
+    p_uninstall_svc.add_argument(
+        "--user", action="store_true",
+        help="Target the --user unit (default: system scope, needs sudo).",
+    )
+    p_uninstall_svc.add_argument(
+        "--purge", action="store_true",
+        help="Also delete /etc/eth-validator-stats and /var/lib/eth-validator-stats.",
+    )
+    from ._install_service import cmd_uninstall_service as _cmd_uninstall_svc
+    p_uninstall_svc.set_defaults(func=_cmd_uninstall_svc)
+
     return parser
 
 
