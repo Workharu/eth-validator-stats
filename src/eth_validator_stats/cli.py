@@ -424,6 +424,21 @@ def build_parser() -> argparse.ArgumentParser:
     p_check.add_argument("--missed", type=int, default=None, help="Consecutive missed attestations to alert on (overrides alerts.missed_attestations_threshold in config; config default is 2).")
     p_check.set_defaults(func=cmd_check)
 
+    p_watch = sub.add_parser(
+        "watch",
+        help="Long-running service mode: loop the check cycle until signalled.",
+    )
+    p_watch.add_argument(
+        "--interval", type=float, default=60.0,
+        help="Seconds between check iterations (default: 60).",
+    )
+    p_watch.add_argument(
+        "--missed", type=int, default=None,
+        help="Consecutive missed attestations to alert on (passed through to each iteration).",
+    )
+    from ._watch import cmd_watch as _cmd_watch
+    p_watch.set_defaults(func=_cmd_watch)
+
     p_info = sub.add_parser("info", help="Probe the beacon node and report client/version + endpoint support.")
     p_info.set_defaults(func=cmd_info)
 
