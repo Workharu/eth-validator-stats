@@ -72,12 +72,21 @@ jobs:
           # Entrypoint runs
           /opt/eth-validator-stats/venv/bin/eth-validator-stats --help >/dev/null
 
-      - name: Verify apt remove preserves config dir
+      - name: Verify apt remove preserves user-created config
         run: |
+          # Simulate a user-created config (normally written by `init --system`)
+          # and a state file. dpkg preserves package-owned directories if they
+          # contain user content; empty package-owned dirs are removed on
+          # `apt remove`, which is correct dpkg behavior.
+          echo "beacon_node_url: http://localhost:3500" \
+              | sudo tee /etc/eth-validator-stats/config.yml >/dev/null
+          echo "{}" | sudo tee /var/lib/eth-validator-stats/state.json >/dev/null
           sudo apt-get remove -y eth-validator-stats
-          test -d /etc/eth-validator-stats || (echo "ERROR: config dir removed on apt remove"; exit 1)
-          test -d /var/lib/eth-validator-stats || (echo "ERROR: state dir removed on apt remove"; exit 1)
-          echo "OK: config and state preserved on remove"
+          test -f /etc/eth-validator-stats/config.yml \
+              || (echo "ERROR: user config.yml removed on apt remove"; exit 1)
+          test -f /var/lib/eth-validator-stats/state.json \
+              || (echo "ERROR: state.json removed on apt remove"; exit 1)
+          echo "OK: user config and state preserved on remove"
 
       - name: Verify apt purge wipes everything
         run: |
