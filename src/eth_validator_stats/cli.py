@@ -34,8 +34,8 @@ def state_path() -> Path:
     override = os.environ.get("ETH_VALIDATOR_STATS_STATE")
     if override:
         return Path(override)
-    base = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-    return Path(base) / "eth-validator-stats" / "state.json"
+    import platformdirs
+    return platformdirs.user_data_path("eth-validator-stats") / "state.json"
 
 
 def load_state(path: Path) -> dict:

@@ -35,14 +35,14 @@ def config_path() -> Path:
     override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
     if override:
         return Path(override)
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    return Path(base) / "eth-validator-stats" / DEFAULT_CONFIG_FILENAME
+    import platformdirs
+    return platformdirs.user_config_path("eth-validator-stats") / DEFAULT_CONFIG_FILENAME
 
 
 def legacy_toml_path() -> Path:
     """Resolve the legacy TOML config path (used for migration / deprecation)."""
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
-    return Path(base) / "eth-validator-stats" / LEGACY_CONFIG_FILENAME
+    import platformdirs
+    return platformdirs.user_config_path("eth-validator-stats") / LEGACY_CONFIG_FILENAME
 
 
 def load_config(path: Path | None = None) -> AppConfig:
