@@ -147,6 +147,7 @@ fi
 %license LICENSE
 %doc README.md
 %dir /opt/%{name}
+/opt/%{name}/python
 /opt/%{name}/venv
 %{_bindir}/%{name}
 %{_unitdir}/%{name}.service
