@@ -17,34 +17,43 @@ Shows: validator index, label, status, balance (ETH), and the last 5 attestation
 
 ## Install
 
-**Debian / Ubuntu** (Debian 12+, Ubuntu 22.04+):
+**Debian 12 (Bookworm):**
+
+`python3.11` ships as the default `python3` — no extra repo needed.
 
 ```bash
-# Make sure python3.11 is available
-sudo apt install -y python3.11
-
-# Install the package (downloaded from the GitHub Releases page)
-sudo dpkg -i eth-validator-stats_0.2.0_all.deb
-
-# Configure
+sudo apt install -y python3.11-venv
+sudo apt install -y ./eth-validator-stats_0.2.0-1_all.deb
 sudo eth-validator-stats init --system
-
-# The service auto-starts when the config exists
 sudo systemctl status eth-validator-stats
 ```
 
-**Fedora / RHEL / Rocky / Alma 9+:**
+**Ubuntu 22.04 / 24.04:**
+
+`python3.11` isn't in the default Ubuntu repos, so install it from the
+[deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) first:
 
 ```bash
-# Make sure python3.11 is available
-sudo dnf install -y python3.11
-
-# Install the package
-sudo dnf install eth-validator-stats-0.2.0-1.noarch.rpm
-
-# Configure (RPMs don't auto-start per Fedora policy)
+sudo add-apt-repository -y ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install -y python3.11 python3.11-venv
+sudo apt install -y ./eth-validator-stats_0.2.0-1_all.deb
 sudo eth-validator-stats init --system
-sudo systemctl start eth-validator-stats
+sudo systemctl status eth-validator-stats
+```
+
+> **Important:** use `apt install ./path.deb` (not `dpkg -i`) so apt
+> auto-resolves the python3.11 dependency. If you already ran `dpkg -i`
+> and got a "dependency problems" error, run `sudo apt --fix-broken install`
+> after the PPA steps above to recover.
+
+**Fedora 40 / RHEL 9 / Rocky 9 / Alma 9 (or newer):**
+
+```bash
+sudo dnf install -y python3.11
+sudo dnf install ./eth-validator-stats-0.2.0-1.fc40.x86_64.rpm
+sudo eth-validator-stats init --system
+sudo systemctl start eth-validator-stats   # Fedora policy: doesn't auto-start
 ```
 
 **Any OS with Python 3.11+ (PyPI):**
