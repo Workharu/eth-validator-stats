@@ -181,18 +181,22 @@ def process_upcoming_proposals(
             if prop.get("alerted"):
                 continue
             slots_away = slot - current_slot
-            mins_away = (slots_away * seconds_per_slot) // 60
+            total_seconds = slots_away * seconds_per_slot
+            if total_seconds < 60:
+                delay_str = f"~{total_seconds}s"
+            else:
+                delay_str = f"~{total_seconds // 60} min"
             label_part = f" {label}" if label else ""
             notifier.send(
                 f"validator {idx}{label_part} proposing soon",
-                f"slot {slot} (~{mins_away} min away)",
+                f"slot {slot} ({delay_str} away)",
             )
             prop["alerted"] = True
             fired.append((idx, label, slot))
     return fired
 
 
-HeaderFetcher = Callable[[int], "int | None"]
+HeaderFetcher = Callable[[int], int | None]
 
 
 def process_proposal_outcomes(
