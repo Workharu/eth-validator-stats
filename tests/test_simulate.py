@@ -112,15 +112,10 @@ def test_events_table_scopes_correct():
 
 
 import argparse
-import sys
-from dataclasses import replace
 from pathlib import Path
 
-import pytest
-
-from eth_validator_stats.alerts import AlertsConfig
 from eth_validator_stats.cli import cmd_simulate
-from eth_validator_stats.config_io import AppConfig, ConfigEntry
+from eth_validator_stats.config_io import ConfigEntry
 
 
 def _cfg_with(tmp_path: Path, monkeypatch, *, validators, ntfy_topic="https://ntfy.example/t"):
