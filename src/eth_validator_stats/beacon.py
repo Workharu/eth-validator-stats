@@ -94,6 +94,27 @@ class BeaconClient:
             for v in data
         ]
 
+    def get_proposer_duties(self, epoch: int) -> list[tuple[int, int]]:
+        """Return [(slot, validator_index)] for proposer duties in `epoch`.
+
+        Per spec, nodes are only required to know current and next epoch's duties.
+        Older epochs typically 404 or return empty.
+        """
+        data = self._get_json(f"/eth/v1/validator/duties/proposer/{epoch}")["data"]
+        return [(int(d["slot"]), int(d["validator_index"])) for d in data]
+
+    def get_block_header_at_slot(self, slot: int) -> int | None:
+        """Return the proposer_index for the canonical block at `slot`, or None
+        if no block was proposed (slot was skipped — 404 response).
+        """
+        try:
+            data = self._get_json(f"/eth/v1/beacon/headers/{slot}")["data"]
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+        return int(data["header"]["message"]["proposer_index"])
+
     def get_liveness(self, epoch: int, indices: list[int]) -> dict[int, bool] | None:
         """Return {index: is_live}.
 

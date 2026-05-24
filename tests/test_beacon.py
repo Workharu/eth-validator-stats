@@ -235,3 +235,52 @@ def test_liveness_defaults_missing_is_live_to_false():
     with BeaconClient("http://node", transport=transport) as c:
         out = c.get_liveness(1, [1])
     assert out == {1: False}
+
+
+def test_get_proposer_duties_parses():
+    transport = make_transport(
+        {
+            ("GET", "/eth/v1/validator/duties/proposer/100"): {
+                "data": [
+                    {"pubkey": "0xab", "validator_index": "12345", "slot": "3200"},
+                    {"pubkey": "0xcd", "validator_index": "67890", "slot": "3210"},
+                ]
+            }
+        }
+    )
+    with BeaconClient("http://node", transport=transport) as c:
+        duties = c.get_proposer_duties(100)
+    assert duties == [(3200, 12345), (3210, 67890)]
+
+
+def test_get_block_header_at_slot_returns_proposer_index():
+    transport = make_transport(
+        {
+            ("GET", "/eth/v1/beacon/headers/3200"): {
+                "data": {"header": {"message": {"slot": "3200", "proposer_index": "12345"}}}
+            }
+        }
+    )
+    with BeaconClient("http://node", transport=transport) as c:
+        idx = c.get_block_header_at_slot(3200)
+    assert idx == 12345
+
+
+def test_get_block_header_at_slot_returns_none_on_missed_slot():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, text="not found")
+
+    transport = httpx.MockTransport(handler)
+    with BeaconClient("http://node", transport=transport) as c:
+        idx = c.get_block_header_at_slot(3200)
+    assert idx is None
+
+
+def test_get_block_header_at_slot_raises_on_500():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    transport = httpx.MockTransport(handler)
+    with BeaconClient("http://node", transport=transport) as c:
+        with pytest.raises(httpx.HTTPStatusError):
+            c.get_block_header_at_slot(3200)
