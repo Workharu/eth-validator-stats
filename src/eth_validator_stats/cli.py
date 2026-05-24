@@ -373,10 +373,45 @@ def cmd_init(args: argparse.Namespace) -> int:
     return run_wizard(w, cfg_path=cfg_path)
 
 
+def configure_logging(level_name: str | None) -> None:
+    """Configure the root logger once at process start.
+
+    Resolution order: explicit arg > env var > INFO.
+    Output is timestamped UTC, level- and logger-name-tagged, on stderr.
+    Safe to call multiple times; uses force=True to reset handlers.
+    Handlers not writing to sys.stderr/sys.stdout (e.g. pytest caplog) are preserved.
+    """
+    level_str = level_name or os.environ.get("ETH_VALIDATOR_STATS_LOG_LEVEL") or "INFO"
+    level = getattr(logging, level_str.upper(), logging.INFO)
+    logging.Formatter.converter = time.gmtime  # UTC timestamps
+    # Preserve handlers not targeting stderr/stdout (e.g. pytest's caplog buffer).
+    root = logging.getLogger()
+    extra_handlers = [
+        h for h in root.handlers
+        if not (isinstance(h, logging.StreamHandler) and getattr(h, "stream", None) in (sys.stderr, sys.stdout))
+    ]
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%SZ",
+        stream=sys.stderr,
+        force=True,
+    )
+    for h in extra_handlers:
+        if h not in root.handlers:
+            root.addHandler(h)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="eth-validator-stats",
         description="Tiny self-hosted CLI for Ethereum validator stats.",
+    )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default=None,
+        help="Log level for stderr output (default: INFO; override via ETH_VALIDATOR_STATS_LOG_LEVEL).",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -411,6 +446,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    configure_logging(getattr(args, "log_level", None))
     return args.func(args)
 
 

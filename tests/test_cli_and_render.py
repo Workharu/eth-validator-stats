@@ -142,3 +142,19 @@ def test_poll_logs_proposer_duties_failure_at_warning(monkeypatch, caplog):
         "proposer duties fetch failed" in rec.message and rec.levelno == logging.WARNING
         for rec in caplog.records
     ), [rec.message for rec in caplog.records]
+
+
+def test_main_configures_root_logger_to_debug(monkeypatch, capsys):
+    import logging
+    from eth_validator_stats.cli import configure_logging
+
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "DEBUG")
+    configure_logging(None)  # picks up env var
+
+    log = logging.getLogger("eth_validator_stats.test_probe")
+    log.debug("dbg-marker")
+    log.info("info-marker")
+
+    err = capsys.readouterr().err
+    assert "dbg-marker" in err
+    assert "info-marker" in err
