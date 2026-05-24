@@ -4,6 +4,14 @@
 # "Empty %files file ... debugsourcefiles.list".
 %global debug_package %{nil}
 
+# Disable the brp-check-rpaths step. The bundled python-build-standalone
+# interpreter ships tcl/tk libraries (libtcl9.0.so, libtcl9tk9.0.so) with
+# RPATHs baked in from PBS's own build environment (/tools/deps/lib). Those
+# paths don't exist on the target host, but they are harmless: tkinter is
+# not used by this app, and the bundled libs find their actual deps via
+# $ORIGIN at runtime. check-rpaths is too strict to allow a sealed bundle.
+%global __brp_check_rpaths %{nil}
+
 Name:           eth-validator-stats
 Version:        0.3.0
 Release:        1%{?dist}
