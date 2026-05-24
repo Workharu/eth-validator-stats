@@ -1,3 +1,14 @@
+eth-validator-stats (0.3.0-1) unstable; urgency=medium
+
+  * Self-contained .deb: bundles python-build-standalone via uv, drops the
+    runtime dependency on system python3.11. `apt install` now works on
+    Ubuntu 24.04+ without the deadsnakes PPA prerequisite.
+  * Adds amd64 + arm64 packages from a CI matrix.
+  * New eth-validator-stats install-service / uninstall-service subcommands
+    for pipx-installed users.
+
+ -- Workharu <Workharu@users.noreply.github.com>  Sun, 24 May 2026 18:00:00 +0000
+
 eth-validator-stats (0.2.1-1) unstable; urgency=medium
 
   * Docs-only: correct install instructions in README for Ubuntu 24.04

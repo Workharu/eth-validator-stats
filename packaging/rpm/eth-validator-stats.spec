@@ -5,7 +5,7 @@
 %global debug_package %{nil}
 
 Name:           eth-validator-stats
-Version:        0.2.1
+Version:        0.3.0
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -155,6 +155,12 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.3.0-1
+- Self-contained .rpm: bundles python-build-standalone via uv, drops the
+  runtime dependency on system python3.11.
+- Adds x86_64 + aarch64 packages from a CI matrix.
+- New eth-validator-stats install-service / uninstall-service subcommands.
+
 * Sun May 24 2026 Workharu <Workharu@users.noreply.github.com> - 0.2.1-1
 - Docs-only: correct install instructions in README for Ubuntu 24.04
   (deadsnakes PPA prerequisite) and Fedora; recommend apt install ./path.deb
