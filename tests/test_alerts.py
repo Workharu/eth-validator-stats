@@ -211,23 +211,25 @@ def test_ntfy_posts_with_title_header_and_body():
     assert seen["body"] == "OFFLINE status=exited_slashed"
 
 
-def test_ntfy_swallows_errors(capsys):
+def test_ntfy_swallows_errors(caplog):
     """Notification failure must not crash check command."""
+    import logging
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="server error")
 
     transport = httpx.MockTransport(handler)
     n = NtfyNotifier("https://ntfy.sh/eth-test", transport=transport)
-    n.send("t", "b")  # must not raise
-    err = capsys.readouterr().err
-    assert "ntfy notify failed" in err
+    with caplog.at_level(logging.WARNING, logger="eth_validator_stats.alerts"):
+        n.send("t", "b")  # must not raise
+    assert any("ntfy notify failed" in rec.message for rec in caplog.records)
 
 
-def test_ntfy_title_unicode_silently_fails(capsys):
+def test_ntfy_title_unicode_silently_fails(caplog):
     """Documents the constraint: non-ASCII in the Title header is rejected by httpx.
-    NtfyNotifier swallows the error to stderr; nothing reaches the server. This is
+    NtfyNotifier swallows the error via logger.warning; nothing reaches the server. This is
     why all caller-supplied titles in alerts.py must stay ASCII (glyphs in body)."""
+    import logging
 
     sent: dict = {}
 
@@ -237,10 +239,10 @@ def test_ntfy_title_unicode_silently_fails(capsys):
 
     transport = httpx.MockTransport(handler)
     n = NtfyNotifier("https://ntfy.sh/x", transport=transport)
-    n.send("validator 1 ✓ proposed", "body ok")
+    with caplog.at_level(logging.WARNING, logger="eth_validator_stats.alerts"):
+        n.send("validator 1 ✓ proposed", "body ok")
     assert sent == {}  # never reached the handler
-    err = capsys.readouterr().err
-    assert "ntfy notify failed" in err
+    assert any("ntfy notify failed" in rec.message for rec in caplog.records)
 
 
 def test_empty_topic_is_silent_noop():
@@ -533,3 +535,23 @@ def test_prune_handles_validator_without_scheduled_proposals():
     state = {"validators": {"1": {"label": "v1"}}}  # no scheduled_proposals key
     removed = prune_scheduled_proposals(state, current_slot=5000, keep_slots=1000)
     assert removed == 0
+
+
+def test_ntfy_failure_is_logged_at_warning(caplog):
+    import logging
+    import httpx
+    from eth_validator_stats.alerts import NtfyNotifier
+
+    def failing_handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("simulated")
+
+    transport = httpx.MockTransport(failing_handler)
+    notifier = NtfyNotifier("https://ntfy.example/topic", transport=transport)
+
+    with caplog.at_level(logging.WARNING, logger="eth_validator_stats.alerts"):
+        notifier.send("title", "body")
+
+    assert any(
+        "ntfy notify failed" in rec.message and rec.levelno == logging.WARNING
+        for rec in caplog.records
+    ), [rec.message for rec in caplog.records]

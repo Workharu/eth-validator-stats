@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-import sys
+import logging
 from dataclasses import dataclass
 from typing import Callable, Protocol
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -49,7 +51,7 @@ class NtfyNotifier:
                 )
                 r.raise_for_status()
         except Exception as e:
-            sys.stderr.write(f"warning: ntfy notify failed: {e}\n")
+            logger.warning("ntfy notify failed: %s", e)
 
 
 def make_notifier(cfg: AlertsConfig) -> Notifier:
