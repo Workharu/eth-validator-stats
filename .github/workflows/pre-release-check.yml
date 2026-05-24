@@ -86,3 +86,31 @@ jobs:
             exit 1
           fi
           echo "OK: full cleanup on purge"
+
+  smoke-rpm:
+    name: Smoke-test .rpm build
+    runs-on: ubuntu-latest
+    container:
+      image: registry.fedoraproject.org/fedora-toolbox:40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            rpm-build python3.11 python3.11-devel systemd-rpm-macros tar git rpmlint
+
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build .rpm
+        run: ./packaging/rpm/build-rpm.sh
+
+      - name: rpmlint the package
+        run: rpmlint dist/*.rpm || true
+
+      - name: Verify package metadata
+        run: rpm -qpi dist/*.rpm && rpm -qpl dist/*.rpm | head -30
+
+      - name: Verify the spec scriptlets parse
+        run: rpm -qp --scripts dist/*.rpm

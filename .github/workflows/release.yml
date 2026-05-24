@@ -68,3 +68,29 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.deb
+
+  build-rpm:
+    name: Build .rpm
+    runs-on: ubuntu-latest
+    container:
+      image: registry.fedoraproject.org/fedora-toolbox:40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            rpm-build python3.11 python3.11-devel systemd-rpm-macros tar git
+
+      - name: Mark workspace safe (container vs host UID mismatch)
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build .rpm
+        run: ./packaging/rpm/build-rpm.sh
+
+      - name: Attach to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.rpm
