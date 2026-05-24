@@ -1,5 +1,11 @@
 # eth-validator-stats
 
+[![CI](https://github.com/Workharu/eth-validator-stats/actions/workflows/pre-release-check.yml/badge.svg?branch=main)](https://github.com/Workharu/eth-validator-stats/actions/workflows/pre-release-check.yml)
+[![PyPI](https://img.shields.io/pypi/v/eth-validator-stats.svg)](https://pypi.org/project/eth-validator-stats/)
+[![Python versions](https://img.shields.io/pypi/pyversions/eth-validator-stats.svg)](https://pypi.org/project/eth-validator-stats/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/Workharu/eth-validator-stats?include_prereleases&sort=semver)](https://github.com/Workharu/eth-validator-stats/releases/latest)
+
 A tiny self-hosted CLI for Ethereum validator stats. Talks to your own beacon node (Prysm, Lighthouse, etc.) over the standard Ethereum Beacon API. Built as a minimal replacement for the now-paid features of the beaconcha.in mobile app.
 
 **v1 surface:**
@@ -16,6 +22,8 @@ Works with any client that implements the standard Ethereum Beacon API — Prysm
 Shows: validator index, label, status, balance (ETH), and the last 5 attestations as a glyph row (`●` hit, `·` miss, `?` not yet observed).
 
 ## Install
+
+Pre-built `.deb` and `.rpm` packages (both `amd64`/`x86_64` and `arm64`/`aarch64`) and the source distribution are attached to each tagged release — see the [latest GitHub Release](https://github.com/Workharu/eth-validator-stats/releases/latest). PyPI publishes the wheel and sdist under the same version.
 
 **Debian / Ubuntu (any version supported by Debian 12 or Ubuntu 22.04+):**
 
