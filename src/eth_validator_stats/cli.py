@@ -25,12 +25,14 @@ from .alerts import (
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
 from .config_io import AppConfig, ConfigEntry, config_path, load_config
+from .onboarding import WizardArgs, run_wizard
 from .render import DisplayRow, build_table
 
 logger = logging.getLogger(__name__)
 
 LIVENESS_BUFFER_LEN = 10
 N_ATTS_DISPLAYED = 5
+SYSTEM_CONFIG_PATH = Path("/etc/eth-validator-stats/config.yml")
 
 
 def state_path() -> Path:
@@ -326,12 +328,31 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 def cmd_init(args: argparse.Namespace) -> int:
     from .config_io import config_path as _cfg_path, legacy_toml_path
-    from .onboarding import WizardArgs, run_wizard
 
-    cfg_path = _cfg_path()
-    legacy = legacy_toml_path()
+    if args.system:
+        if os.geteuid() != 0:
+            print(
+                "error: --system requires root (re-run with sudo).",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        import pwd
+        try:
+            pwd.getpwnam("eth-validator-stats")
+        except KeyError:
+            print(
+                "error: system user 'eth-validator-stats' does not exist. "
+                "Install the distro package first (apt install eth-validator-stats "
+                "or dnf install eth-validator-stats).",
+                file=sys.stderr,
+            )
+            raise SystemExit(1)
+        cfg_path = SYSTEM_CONFIG_PATH
+        legacy = Path("/etc/eth-validator-stats/config.toml")
+    else:
+        cfg_path = _cfg_path()
+        legacy = legacy_toml_path()
 
-    # Step 0 — Existing-config check
     yml_exists = cfg_path.exists()
     toml_exists = legacy.exists()
 
@@ -379,7 +400,14 @@ def cmd_init(args: argparse.Namespace) -> int:
         yes=args.yes,
         force=args.force,
     )
-    return run_wizard(w, cfg_path=cfg_path)
+    rc = run_wizard(w, cfg_path=cfg_path)
+
+    if rc == 0 and args.system:
+        import shutil
+        shutil.chown(cfg_path, "eth-validator-stats", "eth-validator-stats")
+        os.chmod(cfg_path, 0o640)
+
+    return rc
 
 
 def configure_logging(level_name: str | None) -> None:
@@ -455,6 +483,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--yes", action="store_true", help="Accept defaults and skip confirmation prompts.")
     p_init.add_argument("--force", action="store_true", help="Overwrite existing config.")
     p_init.add_argument("--migrate", action="store_true", help="Only migrate legacy TOML to YAML, then exit.")
+    p_init.add_argument(
+        "--system",
+        action="store_true",
+        help="Write to /etc/eth-validator-stats/config.yml and apply system-service ownership "
+             "(requires root and an eth-validator-stats system user; meant for distro-package installs).",
+    )
     p_init.set_defaults(func=cmd_init)
 
     return parser
