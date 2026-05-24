@@ -262,7 +262,14 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_check(args: argparse.Namespace) -> int:
+def run_check_once(args: argparse.Namespace) -> int:
+    """Execute one full scan + alert cycle.
+
+    Returns the same exit-code semantics as `cmd_check`: 0 = clean,
+    2 = alerts fired or monitor blind. Extracted so the long-running
+    `watch` command can call it in a loop. Behavior is identical to
+    the pre-refactor `cmd_check`.
+    """
     cfg = load_config(config_path())
     state = load_state(state_path())
     notifier = make_notifier(cfg.alerts)
@@ -296,13 +303,11 @@ def cmd_check(args: argparse.Namespace) -> int:
             cfg.alerts.proposal_lookahead_epochs,
             notifier,
         )
-        # Outcome verification needs another beacon client call for headers
         try:
             with BeaconClient(cfg.beacon_node_url, auth_token=cfg.beacon_auth_token or None) as bc:
                 process_proposal_outcomes(state, current_slot, bc.get_block_header_at_slot, notifier)
         except (httpx.HTTPError, OSError) as e:
             logger.warning("proposal outcome verification failed: %s", e)
-        # Drop verified proposals older than ~1000 slots (~3.3h) to keep state.json bounded.
         prune_scheduled_proposals(state, current_slot)
 
     save_state(state_path(), state)
@@ -313,6 +318,10 @@ def cmd_check(args: argparse.Namespace) -> int:
         label_part = f" {label}" if label else ""
         print(f"{idx}{label_part}\t{rule}")
     return 2
+
+
+def cmd_check(args: argparse.Namespace) -> int:
+    return run_check_once(args)
 
 
 def cmd_init(args: argparse.Namespace) -> int:
