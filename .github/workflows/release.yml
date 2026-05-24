@@ -86,7 +86,7 @@ jobs:
     name: Build .rpm (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     container:
-      image: registry.fedoraproject.org/fedora-toolbox:40
+      image: registry.fedoraproject.org/fedora:40
     strategy:
       fail-fast: false
       matrix:

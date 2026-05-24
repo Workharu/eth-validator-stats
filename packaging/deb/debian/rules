@@ -6,6 +6,13 @@ VENV    := $(DESTDIR)/opt/eth-validator-stats/venv
 %:
 	dh $@
 
+# Skip shlibdeps scanning of the bundled python-build-standalone interpreter
+# and the venv. libpython3.so uses $ORIGIN-relative RPATH which dpkg-shlibdeps
+# can't resolve, and the bundle is self-contained by design — its private libs
+# must not contribute to the .deb's external dependency declarations.
+override_dh_shlibdeps:
+	dh_shlibdeps -Xopt/eth-validator-stats
+
 override_dh_auto_install:
 	# Only create /opt and /usr/bin here. /etc/eth-validator-stats and
 	# /var/lib/eth-validator-stats are created in postinst so the package
