@@ -121,16 +121,25 @@ def test_info_auth_status_displayed(tmp_path, capsys):
     assert "supersecret" not in out
 
 
-def test_status_warns_once_when_liveness_unsupported(temp_config, capsys):
+def test_status_warns_once_when_liveness_unsupported(temp_config, caplog):
+    import logging
     cfg_path, state_path = temp_config
-    with _patch_client(make_handler(support_liveness=False)):
-        cli.main(["status"])
-        first = capsys.readouterr()
-        cli.main(["status"])
-        second = capsys.readouterr()
-    assert "does not implement /eth/v1/validator/liveness" in first.err
+    with caplog.at_level(logging.WARNING, logger="eth_validator_stats.cli"):
+        with _patch_client(make_handler(support_liveness=False)):
+            cli.main(["status"])
+            first_records = list(caplog.records)
+            caplog.clear()
+            cli.main(["status"])
+            second_records = list(caplog.records)
+    assert any(
+        "does not implement /eth/v1/validator/liveness" in r.message
+        for r in first_records
+    )
     # Second run reads the warned flag from state and stays quiet
-    assert "does not implement /eth/v1/validator/liveness" not in second.err
+    assert not any(
+        "does not implement /eth/v1/validator/liveness" in r.message
+        for r in second_records
+    )
 
 
 def test_status_with_liveness_works_end_to_end(temp_config, capsys):

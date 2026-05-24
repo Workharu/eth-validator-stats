@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import sys
 import time
@@ -25,6 +26,8 @@ from .alerts import (
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
 from .config_io import AppConfig, ConfigEntry, config_path, load_config
 from .render import DisplayRow, build_table
+
+logger = logging.getLogger(__name__)
 
 LIVENESS_BUFFER_LEN = 10
 N_ATTS_DISPLAYED = 5
@@ -100,15 +103,15 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
                 record_scheduled_proposals(state, duties, configured_set)
                 state["last_duties_epoch"] = current_epoch
             except Exception as e:
-                sys.stderr.write(f"warning: proposer duties fetch failed: {e}\n")
+                logger.warning("proposer duties fetch failed: %s", e)
 
         liveness_result = client.get_liveness(target_liveness_epoch, indices) if indices else {}
         if liveness_result is None:
             if not state.get("liveness_unsupported_warned"):
-                sys.stderr.write(
-                    "warning: beacon node does not implement /eth/v1/validator/liveness — "
-                    "'last N attestations' will remain blank. Run 'eth-validator-stats info' "
-                    "for client diagnostics.\n"
+                logger.warning(
+                    "beacon node does not implement /eth/v1/validator/liveness — "
+                    "'last N attestations' will remain blank. "
+                    "Run 'eth-validator-stats info' for client diagnostics."
                 )
                 state["liveness_unsupported_warned"] = True
             liveness: dict[int, bool] = {}
@@ -127,7 +130,7 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
         if info_v is None and entry.index is not None:
             info_v = by_index.get(entry.index)
         if info_v is None:
-            sys.stderr.write(f"warning: beacon node did not return validator {entry.identifier}\n")
+            logger.warning("beacon node did not return validator %s", entry.identifier)
             continue
 
         key = str(info_v.index)
@@ -298,7 +301,7 @@ def cmd_check(args: argparse.Namespace) -> int:
             with BeaconClient(cfg.beacon_node_url, auth_token=cfg.beacon_auth_token or None) as bc:
                 process_proposal_outcomes(state, current_slot, bc.get_block_header_at_slot, notifier)
         except (httpx.HTTPError, OSError) as e:
-            sys.stderr.write(f"warning: proposal outcome verification failed: {e}\n")
+            logger.warning("proposal outcome verification failed: %s", e)
         # Drop verified proposals older than ~1000 slots (~3.3h) to keep state.json bounded.
         prune_scheduled_proposals(state, current_slot)
 

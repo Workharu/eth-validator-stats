@@ -100,3 +100,45 @@ def test_build_table_sorts_by_index_and_includes_rows():
     assert len(table.columns) == 5
     # Two rows
     assert table.row_count == 2
+
+
+def test_poll_logs_proposer_duties_failure_at_warning(monkeypatch, caplog):
+    import logging
+    import httpx
+
+    from eth_validator_stats import cli as cli_mod
+    from eth_validator_stats.beacon import ChainInfo, Head, ValidatorInfo
+    from eth_validator_stats.config_io import AppConfig, ConfigEntry
+    from eth_validator_stats.alerts import AlertsConfig
+
+    cfg = AppConfig(
+        beacon_node_url="http://fake",
+        validators=[ConfigEntry(identifier="1", label="t", pubkey=None, index=1)],
+        beacon_auth_token="",
+        alerts=AlertsConfig(),
+    )
+    state: dict = {}
+
+    class FakeClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def get_chain_info(self):
+            return ChainInfo(genesis_time=0, seconds_per_slot=12, slots_per_epoch=32)
+        def get_head(self):
+            return Head(slot=64)
+        def get_validators(self, ids):
+            return [ValidatorInfo(index=1, pubkey="0xabc", status="active_ongoing", balance_gwei=32_000_000_000)]
+        def get_proposer_duties(self, epoch):
+            raise httpx.HTTPError("simulated duties failure")
+        def get_liveness(self, epoch, indices):
+            return {1: True}
+
+    monkeypatch.setattr(cli_mod, "BeaconClient", lambda *a, **k: FakeClient())
+
+    with caplog.at_level(logging.WARNING, logger="eth_validator_stats.cli"):
+        cli_mod.poll(cfg, state)
+
+    assert any(
+        "proposer duties fetch failed" in rec.message and rec.levelno == logging.WARNING
+        for rec in caplog.records
+    ), [rec.message for rec in caplog.records]
