@@ -93,7 +93,7 @@ done
 PBS_PYTHON=$(find %{buildroot}/opt/%{name}/python -type f -name python3.11 | head -n1)
 test -n "$PBS_PYTHON" || { echo "ERROR: no python3.11 found after uv install"; exit 1; }
 $PBS_PYTHON -m venv --copies %{buildroot}/opt/%{name}/venv
-%{buildroot}/opt/%{name}/venv/bin/pip install --no-cache-dir .
+%{buildroot}/opt/%{name}/venv/bin/pip install --no-cache-dir --no-deps .
 
 # Drop activation scripts: not needed at runtime (the service ExecStart calls
 # the venv binary directly) and they embed the buildroot path in VIRTUAL_ENV=...
@@ -162,7 +162,8 @@ exit 0
 # Create config + state dirs here (not in the install section) so RPM doesn't
 # own them, which means user-created files inside survive `rpm -e`.
 mkdir -p /etc/%{name} /var/lib/%{name}
-chown -R eth-validator-stats:eth-validator-stats /etc/%{name} /var/lib/%{name}
+chown eth-validator-stats:eth-validator-stats /etc/%{name}
+chown -R eth-validator-stats:eth-validator-stats /var/lib/%{name}
 # /etc dir: 0755 so non-group users can at least see the file exists
 # (standard for /etc). The config file itself is created with 0640 by
 # `init --system`, so secrets stay group-read-only.
