@@ -167,9 +167,12 @@ if [ $1 -eq 1 ] ; then
 
 eth-validator-stats installed.
 
-Next steps:
+Next step:
   sudo eth-validator-stats init --system
-  sudo systemctl start eth-validator-stats
+
+`init --system` writes /etc/eth-validator-stats/config.yml AND starts
+the service in one command. The systemd unit is already enabled, so on
+every subsequent boot it starts automatically.
 
 EOF
 fi

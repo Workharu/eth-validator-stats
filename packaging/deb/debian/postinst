@@ -37,14 +37,12 @@ case "$1" in
 
 eth-validator-stats installed.
 
-Next steps:
-  sudo eth-validator-stats init --system           # write /etc/<pkg>/config.yml
-  sudo systemctl start eth-validator-stats         # start the service now
+Next step:
+  sudo eth-validator-stats init --system
 
-The systemd unit is already enabled, so every subsequent boot starts it
-automatically (its ConditionPathExists guard checks for the config file
-at start time). You only need the explicit `systemctl start` once,
-right after `init --system`.
+`init --system` writes /etc/<pkg>/config.yml AND starts the service in
+one command. The systemd unit is already enabled, so on every subsequent
+boot it starts automatically.
 
 EOF
         ;;

@@ -408,8 +408,60 @@ def cmd_init(args: argparse.Namespace) -> int:
         import shutil
         shutil.chown(cfg_path, "eth-validator-stats", "eth-validator-stats")
         os.chmod(cfg_path, 0o640)
+        _maybe_start_systemd_service()
 
     return rc
+
+
+def _maybe_start_systemd_service() -> None:
+    """Start (or restart) eth-validator-stats.service if the unit is installed.
+
+    Best-effort and non-fatal. The .deb / .rpm postinst enables the unit
+    on install but can't start it — the unit's `ConditionPathExists` guard
+    rejects start attempts until `/etc/eth-validator-stats/config.yml`
+    exists. After `init --system` has just written that file, we can
+    immediately bring the service up so the user doesn't have to
+    remember a separate `systemctl start`.
+
+    Uses `restart` (not `start`) so that re-running `init --system
+    --force` against an already-running service picks up the new config
+    automatically. `restart` on a stopped service is equivalent to
+    `start`, so this is safe in both first-install and re-init paths.
+
+    Silently no-ops when:
+      - systemctl is not on PATH (non-systemd host: macOS, certain
+        containers, pure-pipx desktops)
+      - the eth-validator-stats.service unit is not installed (e.g.
+        pipx user who did not run `install-service`)
+    """
+    import shutil as _shutil
+    import subprocess
+
+    systemctl = _shutil.which("systemctl")
+    if systemctl is None:
+        return
+
+    # Is the unit known to systemd?
+    if subprocess.run(
+        [systemctl, "cat", "eth-validator-stats.service"],
+        capture_output=True,
+    ).returncode != 0:
+        return
+
+    result = subprocess.run(
+        [systemctl, "restart", "eth-validator-stats"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        print("✓ eth-validator-stats.service started")
+    else:
+        err = result.stderr.strip() or f"systemctl exited {result.returncode}"
+        print(
+            f"note: failed to auto-start eth-validator-stats.service: {err}\n"
+            f"      Run `sudo systemctl start eth-validator-stats` after fixing.",
+            file=sys.stderr,
+        )
 
 
 def _resolve_simulate_validator(cfg: AppConfig, requested_idx: int | None) -> ConfigEntry:

@@ -65,8 +65,7 @@ Works on Debian 12+ and Ubuntu 22.04+ (also 24.04, no deadsnakes PPA needed — 
 sudo apt install -y ./eth-validator-stats_0.3.4-1_amd64.deb
 
 # 3. Set up config + start the service.
-sudo eth-validator-stats init --system
-sudo systemctl start eth-validator-stats
+sudo eth-validator-stats init --system           # writes config AND starts the service
 sudo systemctl status eth-validator-stats        # confirm it's running
 ```
 
@@ -101,8 +100,7 @@ sudo apt purge eth-validator-stats            # also wipes config + state + user
 sudo dnf install ./eth-validator-stats-0.3.4-1.fc40.x86_64.rpm
 
 # 3. Set up config + start the service.
-sudo eth-validator-stats init --system
-sudo systemctl start eth-validator-stats
+sudo eth-validator-stats init --system           # writes config AND starts the service
 sudo systemctl status eth-validator-stats        # confirm it's running
 ```
 
@@ -137,8 +135,9 @@ sudo eth-validator-stats install-service             # system scope (recommended
 # or, no sudo:
 eth-validator-stats install-service --user           # systemctl --user unit
 
-sudo eth-validator-stats init --system               # populate config
-sudo systemctl start eth-validator-stats             # or `systemctl --user start ...`
+sudo eth-validator-stats init --system               # writes config AND starts the service
+# For --user installs: `init --system` requires root; instead use
+# `eth-validator-stats init` (per-user config) then `systemctl --user start eth-validator-stats`.
 ```
 
 **Upgrade:** `pipx install --force eth-validator-stats`.
@@ -245,7 +244,7 @@ Example crontab (every 5 min, fall back to a desktop notification if the alert p
 
 ### Run as a service (Linux / Windows)
 
-If you installed via `.deb` or `.rpm`, the systemd unit is **already installed** — see the Install section above. Just `sudo eth-validator-stats init --system` and `sudo systemctl start eth-validator-stats`.
+If you installed via `.deb` or `.rpm`, the systemd unit is **already installed** — see the Install section above. Just `sudo eth-validator-stats init --system` (which writes the config and starts the service in one step).
 
 For pipx installs, register the same unit with `sudo eth-validator-stats install-service` (covered in the [pipx section](#any-os-with-python-311-pypi)).
 
