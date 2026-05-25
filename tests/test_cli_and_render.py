@@ -341,3 +341,22 @@ def test_cmd_status_prints_staleness_footer(monkeypatch, tmp_path, capsys):
     assert "last updated" in out.lower()
     # 125 seconds ago should render as "2m" or "2 min" — accept either.
     assert "2m" in out or "2 min" in out
+
+
+def test_cmd_status_prints_hint_when_state_is_empty(monkeypatch, tmp_path, capsys):
+    """First-run case: state file missing or empty. Don't show an empty
+    table with no explanation — guide the user toward `check` or watch."""
+    from eth_validator_stats import cli as cli_mod
+
+    # No state file at all on disk.
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(tmp_path / "missing.json"))
+
+    class _Cfg: validators = []
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+
+    import argparse
+    rc = cli_mod.cmd_status(argparse.Namespace(refresh=False))
+    out = capsys.readouterr().out
+    assert rc == 0
+    # Hint should mention the way out: check, watch, or --refresh.
+    assert "evs check" in out or "--refresh" in out or "watch" in out.lower()

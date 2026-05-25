@@ -366,12 +366,23 @@ def _format_staleness(last_poll_ts: int | None, now_ts: int) -> str | None:
 def cmd_status(args: argparse.Namespace) -> int:
     cfg = load_config()
     state = load_state(state_path())
-    if getattr(args, "refresh", False):
+    refresh = getattr(args, "refresh", False)
+    console = Console()
+
+    if refresh:
         rows = poll(cfg, state)
         save_state(state_path(), state)
     else:
         rows = _rows_from_state(cfg, state)
-    console = Console()
+        if not rows and not state.get("last_poll_ts"):
+            console.print(
+                "[yellow]No state on disk yet.[/yellow]\n"
+                "  - Start the watcher:    [bold]sudo systemctl start eth-validator-stats[/bold]\n"
+                "  - Or run one check:     [bold]evs check[/bold]\n"
+                "  - Or poll inline now:   [bold]evs status --refresh[/bold]"
+            )
+            return 0
+
     console.print(build_table(rows, n_atts=N_ATTS_DISPLAYED))
     footer = _format_staleness(state.get("last_poll_ts"), int(time.time()))
     if footer:
