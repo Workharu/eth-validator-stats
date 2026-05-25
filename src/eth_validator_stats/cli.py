@@ -48,12 +48,19 @@ logger = logging.getLogger(__name__)
 LIVENESS_BUFFER_LEN = 10
 N_ATTS_DISPLAYED = 5
 SYSTEM_CONFIG_PATH = Path("/etc/eth-validator-stats/config.yml")
+SYSTEM_STATE_DIR = Path("/var/lib/eth-validator-stats")
 
 
 def state_path() -> Path:
     override = os.environ.get("ETH_VALIDATOR_STATS_STATE")
     if override:
         return Path(override)
+    # When the system install directory is present and readable, every
+    # caller (root or unprivileged) should converge on the same file the
+    # systemd watch service writes to. Without this, `evs status`,
+    # `sudo evs status`, and the watcher each maintain their own copy.
+    if SYSTEM_STATE_DIR.is_dir() and os.access(SYSTEM_STATE_DIR, os.R_OK):
+        return SYSTEM_STATE_DIR / "state.json"
     import platformdirs
     return platformdirs.user_data_path("eth-validator-stats") / "state.json"
 
