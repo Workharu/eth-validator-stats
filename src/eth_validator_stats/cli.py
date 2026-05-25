@@ -561,6 +561,7 @@ def cmd_simulate(args: argparse.Namespace, *, _notifier=None) -> int:
             cfg.alerts.ntfy_topic,
             timeout=cfg.alerts.request_timeout_s,
             raise_on_error=True,
+            icon_url=cfg.alerts.icon_url,
         )
 
     # Build (title, body) for the event.
@@ -769,6 +770,55 @@ def build_parser() -> argparse.ArgumentParser:
     p_sim.add_argument("--delay", default=None,
                        help="proposing-soon: human-readable delay (default '~6 min').")
     p_sim.set_defaults(func=cmd_simulate)
+
+    # validators add / list / rm — CRUD on config.yml without editing YAML.
+    p_val = sub.add_parser(
+        "validators",
+        help="Add, list, or remove validators (without editing config.yml by hand).",
+    )
+    val_sub = p_val.add_subparsers(dest="val_cmd", required=True)
+
+    p_val_add = val_sub.add_parser(
+        "add",
+        help="Add a validator by pubkey (0x...) or numeric index.",
+    )
+    p_val_add.add_argument("identifier", help="Validator pubkey (0x...) or index.")
+    p_val_add.add_argument(
+        "--label", default=None,
+        help="Friendly label for the validator (optional).",
+    )
+    p_val_add.add_argument(
+        "--no-verify", action="store_true",
+        help="Skip the beacon-node existence check. Saves the entry as-is.",
+    )
+    from ._validators_cmd import cmd_validators_add as _cmd_val_add
+    p_val_add.set_defaults(func=_cmd_val_add)
+
+    p_val_list = val_sub.add_parser(
+        "list",
+        help="Print the validators currently in the config.",
+    )
+    p_val_list.add_argument(
+        "--status", action="store_true",
+        help="Also hit the beacon node for live status + balance.",
+    )
+    from ._validators_cmd import cmd_validators_list as _cmd_val_list
+    p_val_list.set_defaults(func=_cmd_val_list)
+
+    p_val_rm = val_sub.add_parser(
+        "rm",
+        help="Remove a validator (by index, pubkey, or label).",
+    )
+    p_val_rm.add_argument(
+        "identifier",
+        help="Index, pubkey (0x...), or label of the validator to remove.",
+    )
+    p_val_rm.add_argument(
+        "--yes", action="store_true",
+        help="Skip the confirmation prompt.",
+    )
+    from ._validators_cmd import cmd_validators_rm as _cmd_val_rm
+    p_val_rm.set_defaults(func=_cmd_val_rm)
 
     return parser
 

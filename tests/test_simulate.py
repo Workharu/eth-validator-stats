@@ -118,9 +118,12 @@ from eth_validator_stats.cli import cmd_simulate
 from eth_validator_stats.config_io import ConfigEntry
 
 
-def _cfg_with(tmp_path: Path, monkeypatch, *, validators, ntfy_topic="https://ntfy.example/t"):
+def _cfg_with(tmp_path: Path, monkeypatch, *, validators, ntfy_topic="https://ntfy.example/t", icon_url=None):
     """Write a YAML config to tmp_path and point ETH_VALIDATOR_STATS_CONFIG at it."""
     import yaml
+    alerts: dict = {"ntfy_topic": ntfy_topic, "cooldown_minutes": 30}
+    if icon_url is not None:
+        alerts["icon_url"] = icon_url
     data = {
         "beacon_node_url": "http://localhost:3500",
         "validators": [
@@ -128,7 +131,7 @@ def _cfg_with(tmp_path: Path, monkeypatch, *, validators, ntfy_topic="https://nt
             else {"pubkey": v.pubkey, "label": v.label}
             for v in validators
         ],
-        "alerts": {"ntfy_topic": ntfy_topic, "cooldown_minutes": 30},
+        "alerts": alerts,
     }
     cfg_path = tmp_path / "config.yml"
     cfg_path.write_text(yaml.safe_dump(data))
@@ -276,9 +279,10 @@ def test_simulate_end_to_end_via_main_hits_real_notifier(tmp_path, monkeypatch, 
 
     transport = httpx.MockTransport(handler)
 
-    def _factory(topic_url, *, timeout=5.0, raise_on_error=False):
+    def _factory(topic_url, *, timeout=5.0, raise_on_error=False, icon_url=""):
         return RealNtfyNotifier(
-            topic_url, timeout=timeout, transport=transport, raise_on_error=raise_on_error,
+            topic_url, timeout=timeout, transport=transport,
+            raise_on_error=raise_on_error, icon_url=icon_url,
         )
 
     monkeypatch.setattr(cli_mod, "NtfyNotifier", _factory)
@@ -288,3 +292,67 @@ def test_simulate_end_to_end_via_main_hits_real_notifier(tmp_path, monkeypatch, 
     assert captured == [("validator 42 end2end", "MISSED_ATTESTATIONS last=2")]
     out = capsys.readouterr().out
     assert "sent:" in out
+
+
+def _patch_e2e_notifier(monkeypatch, captured: list):
+    """Replace cli's NtfyNotifier with a MockTransport-backed real one that
+    records (title, icon, body) for each POST. Returns nothing — side-effect
+    only. Mirrors the pattern in test_simulate_end_to_end_via_main_hits_real_notifier
+    but exposes the Icon header so icon-routing tests can assert on it.
+    """
+    import httpx
+    from eth_validator_stats import cli as cli_mod
+    from eth_validator_stats.alerts import NtfyNotifier as RealNtfyNotifier
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append((
+            request.headers.get("title", ""),
+            request.headers.get("icon", ""),
+            request.content.decode(),
+        ))
+        return httpx.Response(200, text="ok")
+
+    transport = httpx.MockTransport(handler)
+
+    def _factory(topic_url, *, timeout=5.0, raise_on_error=False, icon_url=""):
+        return RealNtfyNotifier(
+            topic_url, timeout=timeout, transport=transport,
+            raise_on_error=raise_on_error, icon_url=icon_url,
+        )
+
+    monkeypatch.setattr(cli_mod, "NtfyNotifier", _factory)
+
+
+def test_simulate_sends_default_icon_header(tmp_path, monkeypatch):
+    """Simulate must send the configured icon URL (defaulted to the app icon)
+    as an Icon header so push receivers render the brand alongside the alert.
+    """
+    from eth_validator_stats import cli as cli_mod
+    from eth_validator_stats.alerts import DEFAULT_NTFY_ICON_URL
+
+    v = ConfigEntry(identifier="42", label="home", pubkey=None, index=42)
+    _cfg_with(tmp_path, monkeypatch, validators=[v])  # no icon_url override → default
+
+    captured: list[tuple[str, str, str]] = []
+    _patch_e2e_notifier(monkeypatch, captured)
+
+    rc = cli_mod.main(["simulate", "missed-attestation"])
+    assert rc == 0
+    assert len(captured) == 1
+    assert captured[0][1] == DEFAULT_NTFY_ICON_URL
+
+
+def test_simulate_sends_custom_icon_header(tmp_path, monkeypatch):
+    """A user-configured icon_url must reach the ntfy push from the simulate path."""
+    from eth_validator_stats import cli as cli_mod
+
+    custom = "https://example.com/my-icon.png"
+    v = ConfigEntry(identifier="42", label="home", pubkey=None, index=42)
+    _cfg_with(tmp_path, monkeypatch, validators=[v], icon_url=custom)
+
+    captured: list[tuple[str, str, str]] = []
+    _patch_e2e_notifier(monkeypatch, captured)
+
+    rc = cli_mod.main(["simulate", "missed-attestation"])
+    assert rc == 0
+    assert captured[0][1] == custom

@@ -17,6 +17,9 @@ eth-validator-stats check [--missed N]    # cron mode: prints offenders, exits 2
 eth-validator-stats watch [--interval N]  # service mode: loop a check every N seconds
 eth-validator-stats info                  # probe beacon node: client/version + endpoint support
 eth-validator-stats simulate <event>      # fire a test ntfy push (no real outage needed)
+eth-validator-stats validators add <id>   # add a validator (verified against the beacon)
+eth-validator-stats validators list       # print what's configured (--status for live state)
+eth-validator-stats validators rm <id>    # remove one by index, pubkey, or label
 ```
 
 > **Short alias:** every command also responds to `evs`. So `evs status`, `evs check --missed 3`, `evs simulate missed-attestation`, etc. Identical behavior — just three characters to type. The long form remains canonical in scripts, systemd units, and these docs.
@@ -221,6 +224,30 @@ eth-validator-stats info                    # probe the beacon node and check en
 
 `status` prints a table and exits 0. `check` prints one line per offender (`<index> <label>\t<rule>`) and exits **2** if any alerts fire — designed for cron. `watch` runs the same check on a loop and is what the systemd service uses.
 
+### Adding / removing validators after init
+
+Use the `validators` subcommand group instead of editing the YAML:
+
+```bash
+# Add by index (or pubkey). The beacon node is hit to confirm the validator exists.
+eth-validator-stats validators add 12345 --label home-2
+eth-validator-stats validators add 0xb1d2a4b9... --label home-3
+
+# Skip the beacon check (e.g. if the validator is pending_initialized).
+eth-validator-stats validators add 12345 --label home-2 --no-verify
+
+# List what's configured. --status hits the beacon for live state + balance.
+eth-validator-stats validators list
+eth-validator-stats validators list --status
+
+# Remove by index, pubkey, or label.
+eth-validator-stats validators rm 12345
+eth-validator-stats validators rm home-3
+eth-validator-stats validators rm --yes 0xb1d2a4b9...    # skip the prompt
+```
+
+On `.deb`/`.rpm` installs, the systemd service is restarted automatically after `add`/`rm` so the new list is picked up immediately. The file's mode and ownership (0644, `eth-validator-stats:eth-validator-stats`) are preserved across writes.
+
 ### What gets notified
 
 Per-event, all routed through the same notifier (ntfy by default):
@@ -364,7 +391,7 @@ Liveness answers "the validator was seen in the epoch", which is what most users
 - No live TUI / dashboard. `watch` is a headless service-mode loop, not a re-rendered terminal UI.
 - No historical query command — `status` is current-slot, `check` is recent-buffer (~10 epochs). For long-range history you still want a block explorer or beaconcha.in.
 - No on-chain head/target attestation-correctness scoring (only "seen / not seen" per epoch via the liveness endpoint). On-chain correctness is a planned v2 feature.
-- No `validators add/list/rm` CRUD command — edit `config.yml` directly.
+- ~~No `validators add/list/rm` CRUD command — edit `config.yml` directly.~~ Added in 0.3.12; see the [validators subcommand](#adding--removing-validators-after-init).
 - No Telegram / Discord / email transport — ntfy only. Telegram is the planned follow-up.
 
 See [docs/superpowers/plans/](docs/superpowers/plans/) and [docs/superpowers/specs/](docs/superpowers/specs/) for what's actively in flight.
