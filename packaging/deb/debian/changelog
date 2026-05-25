@@ -1,3 +1,15 @@
+eth-validator-stats (0.3.9-1) unstable; urgency=medium
+
+  * Fix (.rpm only): the v0.3.8 rpm build failed with
+    "error: line 205: second install" because rpmbuild matches bare
+    section keywords (install / post / postun / files) anywhere in
+    the spec, including inside shell `#` comments and changelog
+    bullet text. Rephrased every offending occurrence to drop the
+    percent prefix. The .deb side was unaffected and shipped
+    correctly in 0.3.8.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 08:51:35 +0000
+
 eth-validator-stats (0.3.8-1) unstable; urgency=medium
 
   * New: every ntfy push now carries a branded app icon. The default

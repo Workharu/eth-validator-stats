@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.8
+Version:        0.3.9
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -225,6 +225,14 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.9-1
+- Fix: this spec now compiles — bare section keywords (install /
+  post / postun / files) inside shell comments and changelog text
+  were tripping rpmbuild's parser ("second install" at line 205 of
+  the 0.3.8 spec). Rephrased the offending occurrences to drop the
+  percent prefix. The .deb side was unaffected and shipped
+  correctly in 0.3.8.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.8-1
 - New: every ntfy push now carries a branded app icon. The default
   URL points at assets/notification-icon.png in this repo, served
