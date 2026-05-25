@@ -195,10 +195,25 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
 
 
 def evaluate_alerts(rows: list[DisplayRow], missed_threshold: int) -> list[tuple[int, str, str]]:
-    """Return [(index, label, rule), ...] for validators that should alert."""
+    """Return [(index, label, rule), ...] for validators that should alert.
+
+    Status semantics (Beacon API):
+      pending_initialized / pending_queued — deposit accepted but the
+        validator has not yet been activated. It has no committee
+        assignment, so the liveness endpoint won't list it and any
+        "missed" attestations are expected. Not OFFLINE, not missed.
+      active_ongoing — the only state in which we count attestations.
+        active_exiting / active_slashed are technically still required
+        to attest but are on their way out; treat them as OFFLINE so
+        the operator sees the transition.
+      anything else (exited_*, withdrawal_*) — OFFLINE.
+    """
     alerts: list[tuple[int, str, str]] = []
     for r in rows:
-        if r.status != "active_ongoing" and not r.status.startswith("pending"):
+        if r.status.startswith("pending"):
+            # Not yet validating — nothing to alert on.
+            continue
+        if r.status != "active_ongoing":
             alerts.append((r.index, r.label, f"OFFLINE status={r.status}"))
             continue
         tail = r.liveness[-missed_threshold:]

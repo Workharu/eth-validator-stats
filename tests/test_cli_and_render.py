@@ -65,9 +65,40 @@ def test_evaluate_alerts_offline_status_fires():
     assert alerts[0][2].startswith("OFFLINE")
 
 
-def test_evaluate_alerts_pending_is_not_offline():
+def test_evaluate_alerts_pending_queued_is_not_offline():
     rows = [_row(status="pending_queued", liveness=[])]
     assert evaluate_alerts(rows, missed_threshold=3) == []
+
+
+def test_evaluate_alerts_pending_initialized_is_not_offline():
+    """`pending_initialized` is the status between deposit confirmation and
+    the activation queue. Same treatment as pending_queued: not yet
+    validating, no alerts."""
+    rows = [_row(status="pending_initialized", liveness=[])]
+    assert evaluate_alerts(rows, missed_threshold=3) == []
+
+
+def test_evaluate_alerts_pending_does_not_fire_missed_attestations():
+    """Regression: prior to the fix, a pending validator that the liveness
+    endpoint happened to return (some clients do, some don't) would have
+    its zeros counted as misses once the buffer grew long enough. Pending
+    validators have no committee assignment, so a "miss" is expected and
+    should never alert."""
+    rows = [_row(status="pending_initialized", liveness=[(1, 0), (2, 0), (3, 0), (4, 0)])]
+    assert evaluate_alerts(rows, missed_threshold=3) == []
+
+    rows = [_row(status="pending_queued", liveness=[(1, 0), (2, 0), (3, 0), (4, 0)])]
+    assert evaluate_alerts(rows, missed_threshold=3) == []
+
+
+def test_evaluate_alerts_active_exiting_is_offline():
+    """active_exiting is on its way out. Surface the transition as OFFLINE
+    so the operator sees it — missing attestations during this window
+    still accrue penalties."""
+    rows = [_row(status="active_exiting", liveness=[(1, 1)] * 5)]
+    alerts = evaluate_alerts(rows, missed_threshold=3)
+    assert len(alerts) == 1
+    assert "active_exiting" in alerts[0][2]
 
 
 def test_evaluate_alerts_missed_attestations_threshold():
