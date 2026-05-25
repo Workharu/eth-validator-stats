@@ -4,8 +4,16 @@ set -e
 #DEBHELPER#
 
 case "$1" in
+    remove)
+        # The bundled Python interpreter creates __pycache__/*.pyc files at
+        # runtime that dpkg doesn't own. When dpkg removes its own files
+        # the dirs are still non-empty, so it prints a stack of warnings
+        # like "directory ... not empty so not removed". Clean up the
+        # whole bundled tree ourselves so the user gets a quiet uninstall.
+        rm -rf /opt/eth-validator-stats
+        ;;
     purge)
-        rm -rf /etc/eth-validator-stats /var/lib/eth-validator-stats
+        rm -rf /etc/eth-validator-stats /var/lib/eth-validator-stats /opt/eth-validator-stats
         if getent passwd eth-validator-stats >/dev/null; then
             deluser --system --quiet eth-validator-stats || true
         fi

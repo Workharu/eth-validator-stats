@@ -407,7 +407,13 @@ def cmd_init(args: argparse.Namespace) -> int:
     if rc == 0 and args.system:
         import shutil
         shutil.chown(cfg_path, "eth-validator-stats", "eth-validator-stats")
-        os.chmod(cfg_path, 0o640)
+        # 0644 (world-readable) so any user can run `eth-validator-stats
+        # status` without joining the eth-validator-stats group. Config
+        # contents are low-sensitivity: validator pubkeys/indices are public
+        # on-chain anyway, beacon URLs are local, ntfy topic is unguessable
+        # but not high-value. If you do put a `beacon_auth_token` for a
+        # hosted provider in here, tighten to 0640 manually.
+        os.chmod(cfg_path, 0o644)
         _maybe_start_systemd_service()
 
     return rc

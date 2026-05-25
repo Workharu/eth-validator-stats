@@ -187,6 +187,13 @@ fi
 
 %postun
 %systemd_postun_with_restart %{name}.service
+# On full uninstall ($1 == 0), clean up the bundled tree. The Python
+# interpreter creates __pycache__/*.pyc at runtime that rpm doesn't own,
+# leaving non-empty dirs behind otherwise. $1 != 0 is an upgrade, so we
+# leave files in place — the new version's %install will overwrite.
+if [ $1 -eq 0 ]; then
+    rm -rf /opt/%{name}
+fi
 
 %files
 %license LICENSE

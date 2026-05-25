@@ -37,6 +37,19 @@ case "$1" in
         chown -R eth-validator-stats:eth-validator-stats \
             /etc/eth-validator-stats /var/lib/eth-validator-stats
 
+        # 4. Upgrade-time: if /etc/<pkg>/config.yml was previously chmod 0640
+        # (the default in 0.3.0-0.3.6), bump it to 0644 so non-group users
+        # can read the config without sudo or group membership. Only touch
+        # the file if it has the exact old default — leave any user-customized
+        # tighter perms alone.
+        cfg=/etc/eth-validator-stats/config.yml
+        if [ -f "$cfg" ]; then
+            cur=$(stat -c '%a' "$cfg" 2>/dev/null || echo "")
+            if [ "$cur" = "640" ]; then
+                chmod 0644 "$cfg"
+            fi
+        fi
+
         # 3. Helpful next-step message
         cat <<'EOF'
 
