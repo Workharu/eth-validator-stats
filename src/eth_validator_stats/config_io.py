@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -11,7 +10,6 @@ from .alerts import AlertsConfig
 
 DEFAULT_BEACON_URL = "http://localhost:3500"
 DEFAULT_CONFIG_FILENAME = "config.yml"
-LEGACY_CONFIG_FILENAME = "config.toml"
 # System-wide config location written by `init --system` and by the
 # .deb / .rpm post-install scripts. Searched before the per-user XDG path
 # when reading, so a service install is visible to `eth-validator-stats
@@ -50,21 +48,10 @@ def config_path() -> Path:
     return platformdirs.user_config_path("eth-validator-stats") / DEFAULT_CONFIG_FILENAME
 
 
-def legacy_toml_path() -> Path:
-    """Resolve the legacy TOML config path (used for migration / deprecation)."""
-    import platformdirs
-    return platformdirs.user_config_path("eth-validator-stats") / LEGACY_CONFIG_FILENAME
-
-
 def load_config(path: Path | None = None) -> AppConfig:
-    """Load a YAML or TOML config. Path is auto-resolved if None."""
+    """Load a YAML config. Path is auto-resolved if None."""
     if path is None:
-        p, is_legacy_auto = _resolve_existing_config()
-        if is_legacy_auto:
-            sys.stderr.write(
-                f"note: {p} is supported but deprecated. "
-                f"Run 'eth-validator-stats init --migrate' to convert.\n"
-            )
+        p = _resolve_existing_config()
     else:
         p = path
 
@@ -108,15 +95,13 @@ def load_config(path: Path | None = None) -> AppConfig:
             f"  - Re-run with sudo:  sudo eth-validator-stats <cmd>\n"
             f"  - Or add yourself to the eth-validator-stats group, then log out\n"
             f"    and back in:        sudo usermod -aG eth-validator-stats $USER"
-        )
+        ) from e
 
-    if p.suffix in (".yml", ".yaml"):
-        raw = yaml.safe_load(text) or {}
-    elif p.suffix == ".toml":
-        import tomllib
-        raw = tomllib.loads(text)
-    else:
-        raise SystemExit(f"unsupported config suffix: {p.suffix}")
+    if p.suffix not in (".yml", ".yaml"):
+        raise SystemExit(
+            f"unsupported config suffix: {p.suffix} (expected .yml or .yaml)"
+        )
+    raw = yaml.safe_load(text) or {}
     return _parse_config(raw)
 
 
@@ -207,7 +192,7 @@ def _exists_safely(p: Path) -> bool | None:
         return None
 
 
-def _resolve_existing_config() -> tuple[Path, bool]:
+def _resolve_existing_config() -> Path:
     """Find the first existing config file along the search chain.
 
     Order:
@@ -216,48 +201,21 @@ def _resolve_existing_config() -> tuple[Path, bool]:
       2. /etc/eth-validator-stats/config.yml — system-wide, written by
          `init --system` and the .deb / .rpm post-install scripts.
       3. ~/.config/eth-validator-stats/config.yml — per-user XDG default.
-      4. ~/.config/eth-validator-stats/config.toml — legacy pre-YAML format.
 
-    Returns (path, is_legacy_auto_resolved). The path is the first match.
-    If nothing exists, returns the per-user YAML path so error messages and
-    init writes both point at the same conventional location.
+    Returns the first match. If nothing exists, returns the per-user YAML
+    path so error messages and init writes both point at the same
+    conventional location.
 
     Permission denied on the system path is treated the same as "absent" for
     selection purposes — load_config() detects the EACCES separately and
-    rewrites the not-found error into an actionable "use sudo or join the
-    group" message.
+    rewrites the not-found error into an actionable "use sudo" message.
     """
     override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
     if override:
-        return (Path(override), False)
+        return Path(override)
     if _exists_safely(SYSTEM_CONFIG_PATH) is True:
-        return (SYSTEM_CONFIG_PATH, False)
-    yml = config_path()
-    if yml.exists():
-        return (yml, False)
-    legacy = legacy_toml_path()
-    if legacy.exists():
-        return (legacy, True)
-    return (yml, False)
-
-
-def migrate_from_toml(toml_path: Path, yml_path: Path) -> Path:
-    """Read a TOML config, write an equivalent YAML config, rename the TOML to .bak.
-    Returns the backup path. Raises SystemExit if yml_path already exists.
-    """
-    if yml_path.exists():
-        raise SystemExit(
-            f"refusing to migrate: {yml_path} already exists. "
-            f"Move or delete it first."
-        )
-    # Parse the legacy TOML (without printing the deprecation hint)
-    cfg = load_config(toml_path)
-    # Write YAML
-    write_config(cfg, yml_path)
-    # Rename original to .bak
-    backup = toml_path.with_suffix(toml_path.suffix + ".bak")
-    toml_path.rename(backup)
-    return backup
+        return SYSTEM_CONFIG_PATH
+    return config_path()
 
 
 def _parse_config(raw: dict) -> AppConfig:

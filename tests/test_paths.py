@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from eth_validator_stats.cli import state_path
-from eth_validator_stats.config_io import config_path, legacy_toml_path
+from eth_validator_stats.config_io import config_path
 
 
 def test_config_path_uses_xdg_config_home_via_platformdirs(monkeypatch, tmp_path: Path):
@@ -19,11 +19,6 @@ def test_config_path_env_override_wins(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(custom))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "ignored"))
     assert config_path() == custom
-
-
-def test_legacy_toml_path_uses_xdg_config_home_via_platformdirs(monkeypatch, tmp_path: Path):
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    assert legacy_toml_path() == tmp_path / "eth-validator-stats" / "config.toml"
 
 
 def test_state_path_uses_xdg_data_home_via_platformdirs(monkeypatch, tmp_path: Path):

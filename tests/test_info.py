@@ -39,12 +39,12 @@ def make_handler(*, support_liveness: bool = True, version: str = "TestClient/v1
 
 @pytest.fixture
 def temp_config(tmp_path: Path):
-    cfg_path = tmp_path / "config.toml"
+    cfg_path = tmp_path / "config.yml"
     cfg_path.write_text(
-        'beacon_node_url = "http://test-node"\n'
-        '[[validators]]\n'
-        'index = 1\n'
-        'label = "v1"\n'
+        "beacon_node_url: http://test-node\n"
+        "validators:\n"
+        "  - index: 1\n"
+        "    label: v1\n"
     )
     state_path = tmp_path / "state.json"
     env = {
@@ -95,12 +95,12 @@ def test_info_reports_unsupported_liveness(temp_config, capsys):
 
 
 def test_info_auth_status_displayed(tmp_path, capsys):
-    cfg_path = tmp_path / "config.toml"
+    cfg_path = tmp_path / "config.yml"
     cfg_path.write_text(
-        'beacon_node_url = "http://test-node"\n'
-        'beacon_auth_token = "supersecret"\n'
-        '[[validators]]\n'
-        'index = 1\n'
+        "beacon_node_url: http://test-node\n"
+        "beacon_auth_token: supersecret\n"
+        "validators:\n"
+        "  - index: 1\n"
     )
     state_path = tmp_path / "state.json"
     with patch.dict(

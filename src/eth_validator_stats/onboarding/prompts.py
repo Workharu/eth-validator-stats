@@ -4,7 +4,6 @@ import re
 import sys
 from typing import Protocol
 
-
 _PUBKEY_RE = re.compile(r"^0[xX][0-9a-fA-F]+$")
 _INDEX_RE = re.compile(r"^\d+$")
 
@@ -25,7 +24,10 @@ class StdIO:
 
 
 def prompt(io: IOLike, message: str, *, default: str | None = None) -> str:
-    suffix = f" [{default}]" if default is not None else ""
+    # Only show "[default]" when there's actually something to show.
+    # An empty-string default is a sentinel for "Enter is OK, no displayed
+    # value" — printing "[]" would just be confusing.
+    suffix = f" [{default}]" if default else ""
     raw = io.read_line(f"{message}{suffix}: ").strip()
     if not raw and default is not None:
         return default

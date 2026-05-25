@@ -57,8 +57,7 @@ def _atomic_write_preserving_perms(cfg: AppConfig, path: Path) -> None:
 
 def _resolve_path_to_write() -> Path:
     """Round-trip target = the same file load_config() just read from."""
-    p, _ = _resolve_existing_config()
-    return p
+    return _resolve_existing_config()
 
 
 def _restart_service_if_installed() -> None:
@@ -312,9 +311,9 @@ def cmd_validators_rm(args: argparse.Namespace) -> int:
     remaining = [e for e in cfg.validators if e is not victim]
     if not remaining:
         print(
-            f"error: removing this would leave the config with zero validators, "
-            f"which load_config refuses to read. Add a different validator first "
-            f"with `eth-validator-stats validators add ...`, then retry.",
+            "error: removing this would leave the config with zero validators, "
+            "which load_config refuses to read. Add a different validator first "
+            "with `eth-validator-stats validators add ...`, then retry.",
             file=sys.stderr,
         )
         return 1

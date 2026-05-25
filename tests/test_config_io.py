@@ -11,7 +11,6 @@ from eth_validator_stats.config_io import (
     ConfigEntry,
     _resolve_existing_config,
     load_config,
-    migrate_from_toml,
     write_config,
 )
 
@@ -66,34 +65,12 @@ def test_overwrite_does_not_leak_old_content(tmp_path: Path):
     assert loaded.validators[0].index == 99
 
 
-def test_loads_legacy_toml_with_deprecation_hint(tmp_path: Path, capsys, monkeypatch):
-    cfg_dir = tmp_path / "eth-validator-stats"
-    cfg_dir.mkdir()
-    toml_path = cfg_dir / "config.toml"
-    toml_path.write_text(
-        'beacon_node_url = "http://localhost:3500"\n'
-        '[[validators]]\n'
-        'index = 12345\n'
-        'label = "v1"\n'
-    )
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
-    monkeypatch.delenv("BEACON_NODE_URL", raising=False)
-    monkeypatch.delenv("BEACON_NODE_AUTH_TOKEN", raising=False)
-
-    cfg = load_config()
-    err = capsys.readouterr().err
-    assert cfg.validators[0].index == 12345
-    assert "config.toml" in err and "deprecated" in err
-
-
-def test_explicit_toml_path_does_not_print_deprecation(tmp_path: Path, capsys):
-    toml_path = tmp_path / "explicit.toml"
-    toml_path.write_text('beacon_node_url = "http://x:1"\n[[validators]]\nindex = 1\n')
-    cfg = load_config(toml_path)
-    err = capsys.readouterr().err
-    assert cfg.validators[0].index == 1
-    assert "deprecated" not in err
+def test_unsupported_suffix_errors_clearly(tmp_path: Path):
+    """Anything other than .yml/.yaml is rejected with an informative message."""
+    p = tmp_path / "config.toml"
+    p.write_text("# nope\n")
+    with pytest.raises(SystemExit, match="unsupported config suffix"):
+        load_config(p)
 
 
 def test_yaml_load_rejects_python_object_tag(tmp_path: Path):
@@ -104,46 +81,8 @@ def test_yaml_load_rejects_python_object_tag(tmp_path: Path):
         "validators:\n"
         "  - index: 1\n"
     )
-    with pytest.raises(Exception):  # YAMLError or ConstructorError — both acceptable
+    with pytest.raises(Exception):  # noqa: B017 — YAMLError or ConstructorError — both acceptable
         load_config(p)
-
-
-def test_migrate_from_toml_creates_equivalent_yaml(tmp_path: Path):
-    src = tmp_path / "config.toml"
-    src.write_text(
-        'beacon_node_url = "http://localhost:3500"\n'
-        '[[validators]]\n'
-        'pubkey = "0xabc"\n'
-        'label = "v1"\n'
-        '[[validators]]\n'
-        'index = 42\n'
-        '[alerts]\n'
-        'ntfy_topic = "https://ntfy.sh/eth-vstats-x"\n'
-        'cooldown_minutes = 15\n'
-    )
-    dst = tmp_path / "config.yml"
-    backup = migrate_from_toml(src, dst)
-
-    assert dst.exists()
-    assert backup.exists()
-    assert backup.name == "config.toml.bak"
-    assert not src.exists()  # original was renamed
-
-    loaded = load_config(dst)
-    assert loaded.beacon_node_url == "http://localhost:3500"
-    assert len(loaded.validators) == 2
-    assert loaded.validators[0].pubkey == "0xabc"
-    assert loaded.validators[1].index == 42
-    assert loaded.alerts.cooldown_minutes == 15
-
-
-def test_migrate_from_toml_refuses_if_yaml_exists(tmp_path: Path):
-    src = tmp_path / "config.toml"
-    src.write_text('beacon_node_url = "http://x"\n[[validators]]\nindex = 1\n')
-    dst = tmp_path / "config.yml"
-    dst.write_text("# pre-existing\n")
-    with pytest.raises(SystemExit, match="already exists"):
-        migrate_from_toml(src, dst)
 
 
 def test_alerts_config_new_fields_defaults_round_trip(tmp_path: Path):
@@ -219,9 +158,8 @@ def test_resolver_finds_system_config_when_user_config_absent(
         lambda _: tmp_path / "no-such-home" / ".config",
     )
 
-    p, is_legacy = _resolve_existing_config()
+    p = _resolve_existing_config()
     assert p == fake_etc
-    assert is_legacy is False
 
 
 def test_resolver_prefers_system_config_over_user_config(

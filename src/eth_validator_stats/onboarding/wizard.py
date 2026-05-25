@@ -2,15 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-import sys
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable
 
-from ..alerts import AlertsConfig, DEFAULT_NTFY_ICON_URL, NtfyNotifier
+from ..alerts import DEFAULT_NTFY_ICON_URL, AlertsConfig, NtfyNotifier
 from ..beacon import BeaconClient, ValidatorInfo
 from ..config_io import AppConfig, ConfigEntry, write_config
-from .portscan import Found, scan as default_scan
+from .portscan import Found
+from .portscan import scan as default_scan
 from .prompts import IOLike, StdIO, confirm, parse_validator_input, prompt
 
 
@@ -54,6 +54,7 @@ def _render_qr_for_terminal(url: str) -> str:
     """Return an ASCII/block-character QR code for `url`, or empty string on failure."""
     try:
         import io as _io
+
         import segno
         buf = _io.StringIO()
         segno.make(url, micro=False).terminal(out=buf, border=1, compact=True)
@@ -82,7 +83,7 @@ def run_wizard(
 
     # Step 1 — Beacon node URL (may skip portscan entirely if --beacon-url given)
     if args.beacon_url:
-        version = _probe_node_version(args.beacon_url, beacon_client_factory, io)
+        _probe_node_version(args.beacon_url, beacon_client_factory, io)
         beacon_url = args.beacon_url
     else:
         portscan_fn = portscan_fn or default_scan
@@ -125,7 +126,7 @@ def run_wizard(
     return 0
 
 
-def _probe_node_version(url: str, beacon_factory: "BeaconFactory", io: IOLike) -> str:
+def _probe_node_version(url: str, beacon_factory: BeaconFactory, io: IOLike) -> str:
     """Probe /eth/v1/node/version on a beacon URL. Print result. On failure, offer save-anyway."""
     io.write(f"  Probing {url}/eth/v1/node/version ...\n")
     try:
@@ -137,10 +138,10 @@ def _probe_node_version(url: str, beacon_factory: "BeaconFactory", io: IOLike) -
         io.write(f"  ✗ Could not reach beacon node: {type(e).__name__}: {e}\n")
         if confirm(io, "Save this URL anyway and continue?", default=False):
             return ""
-        raise SystemExit(f"beacon node not reachable at {url}")
+        raise SystemExit(f"beacon node not reachable at {url}") from e
 
 
-def _step_beacon_url(args: WizardArgs, io: IOLike, portscan_fn: PortscanFn, beacon_factory: "BeaconFactory") -> tuple[str, str]:
+def _step_beacon_url(args: WizardArgs, io: IOLike, portscan_fn: PortscanFn, beacon_factory: BeaconFactory) -> tuple[str, str]:
     if args.beacon_url:
         version = _probe_node_version(args.beacon_url, beacon_factory, io)
         return (args.beacon_url, version)

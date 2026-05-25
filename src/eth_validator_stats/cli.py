@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -23,8 +24,8 @@ except ImportError:  # pragma: no cover — Windows / minimal Python builds
 import httpx
 from rich.console import Console
 
+from ._simulate import EVENTS
 from .alerts import (
-    AlertsConfig,
     NtfyNotifier,
     clear_blind_if_recovered,
     make_notifier,
@@ -36,7 +37,6 @@ from .alerts import (
     prune_scheduled_proposals,
     record_scheduled_proposals,
 )
-from ._simulate import EVENTS
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
 from .config_io import AppConfig, ConfigEntry, load_config
 from .onboarding import WizardArgs, run_wizard
@@ -65,9 +65,21 @@ def load_state(path: Path) -> dict:
 
 def save_state(path: Path, state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(state, indent=2))
-    tmp.replace(path)
+    # Unique tmp name so two writers (interactive `status` + the `watch`
+    # loop) can't collide on the same `.json.tmp` and corrupt each other.
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=path.name + ".",
+        suffix=".tmp",
+        dir=str(path.parent),
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(json.dumps(state, indent=2))
+        tmp.replace(path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def chain_info_from_state(state: dict) -> ChainInfo | None:
@@ -213,7 +225,7 @@ def cmd_info(args: argparse.Namespace) -> int:
     console = Console()
 
     auth_repr = "Bearer (***)" if cfg.beacon_auth_token else "none"
-    console.print(f"[bold]Beacon node probe[/bold]")
+    console.print("[bold]Beacon node probe[/bold]")
     console.print(f"  URL : {cfg.beacon_node_url}")
     console.print(f"  Auth: {auth_repr}")
 
@@ -341,7 +353,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 def cmd_init(args: argparse.Namespace) -> int:
-    from .config_io import config_path as _cfg_path, legacy_toml_path
+    from .config_io import config_path as _cfg_path
 
     # Auto-promote `sudo init` to `--system` when the system already
     # expects to find a config at /etc (i.e. the eth-validator-stats
@@ -385,48 +397,17 @@ def cmd_init(args: argparse.Namespace) -> int:
                 "or dnf install eth-validator-stats).",
                 file=sys.stderr,
             )
-            raise SystemExit(1)
+            raise SystemExit(1) from None
         cfg_path = SYSTEM_CONFIG_PATH
-        legacy = Path("/etc/eth-validator-stats/config.toml")
     else:
         cfg_path = _cfg_path()
-        legacy = legacy_toml_path()
 
-    yml_exists = cfg_path.exists()
-    toml_exists = legacy.exists()
-
-    if args.migrate:
-        from .config_io import migrate_from_toml
-        if not toml_exists:
-            print(f"no legacy TOML config to migrate at {legacy}", file=sys.stderr)
-            return 1
-        if yml_exists and not args.force:
-            print(
-                f"{cfg_path} already exists. Move/delete it or rerun with --force.",
-                file=sys.stderr,
-            )
-            return 1
-        if yml_exists and args.force:
-            cfg_path.unlink()
-        backup = migrate_from_toml(legacy, cfg_path)
-        print(f"✓ migrated. legacy file backed up to {backup}")
-        return 0
-
-    if yml_exists and not args.force:
+    if cfg_path.exists() and not args.force:
         print(
             f"config already exists at {cfg_path}. "
             f"Run with --force to overwrite, or edit the file directly."
         )
         return 0
-
-    if toml_exists and not yml_exists and not args.force:
-        print(f"found legacy TOML config at {legacy}")
-        ans = input("Migrate to YAML now? [Y/n]: ").strip().lower()
-        if ans in ("", "y", "yes"):
-            from .config_io import migrate_from_toml
-            backup = migrate_from_toml(legacy, cfg_path)
-            print(f"✓ migrated. legacy file backed up to {backup}")
-            return 0
 
     w = WizardArgs(
         host=args.host,
@@ -716,7 +697,6 @@ def build_parser() -> argparse.ArgumentParser:
     ntfy_group.add_argument("--no-ntfy", action="store_true", help="Skip notification setup.")
     p_init.add_argument("--yes", action="store_true", help="Accept defaults and skip confirmation prompts.")
     p_init.add_argument("--force", action="store_true", help="Overwrite existing config.")
-    p_init.add_argument("--migrate", action="store_true", help="Only migrate legacy TOML to YAML, then exit.")
     p_init.add_argument(
         "--system",
         action="store_true",
@@ -796,7 +776,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     from ._validators_cmd import (
         cmd_validators_add as _cmd_val_add,
+    )
+    from ._validators_cmd import (
         cmd_validators_list as _cmd_val_list,
+    )
+    from ._validators_cmd import (
         cmd_validators_rm as _cmd_val_rm,
     )
 
