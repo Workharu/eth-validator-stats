@@ -8,6 +8,18 @@ import sys
 import time
 from pathlib import Path
 
+# Importing readline (when available) hooks GNU readline into every
+# subsequent built-in input() call in the process, enabling cursor
+# movement (left/right arrows), Ctrl-A/E/U line editing, and proper
+# backspace. Without it the wizard prints raw escape sequences like
+# `^[[D` when the user hits an arrow key, which is jarring during
+# `init` when they're typing the beacon node URL. readline is stdlib
+# on Linux/macOS; Windows builds may not ship it, hence the guard.
+try:
+    import readline  # noqa: F401 — imported for side effect only
+except ImportError:  # pragma: no cover — Windows / minimal Python builds
+    pass
+
 import httpx
 from rich.console import Console
 
