@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.3
+Version:        0.3.4
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -193,7 +193,7 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
-* Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.3-1
+* Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.4-1
 - Fix: status / check / info / simulate now find /etc/<pkg>/config.yml
   written by `init --system` or the .rpm post-install. Previously they
   only checked ~/.config and erred out on system installs unless the
