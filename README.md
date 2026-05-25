@@ -39,7 +39,17 @@ The last column is a sparse glyph row: `●` hit, `·` miss, `?` not yet observe
 
 ## Install
 
-**Pick the path that matches your setup:**
+**One-liner (Linux + macOS):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Workharu/eth-validator-stats/main/scripts/install.sh | sudo bash
+```
+
+Auto-detects your OS and architecture and installs the matching `.deb` / `.rpm` from the latest release. On macOS or any Linux without `apt`/`dnf` it falls back to `pipx install eth-validator-stats` from PyPI. Source: [`scripts/install.sh`](scripts/install.sh).
+
+After install, `sudo eth-validator-stats init` writes the config and starts the systemd service in one step.
+
+**Or pick the path manually:**
 
 | Your situation | Install method | Why |
 |---|---|---|
@@ -62,7 +72,7 @@ Works on Debian 12+ and Ubuntu 22.04+ (also 24.04, no deadsnakes PPA needed — 
 #    Files: eth-validator-stats_<version>-1_amd64.deb (or _arm64.deb)
 
 # 2. Install with apt so dependencies (e.g. adduser) auto-resolve.
-sudo apt install -y ./eth-validator-stats_0.3.10-1_amd64.deb
+sudo apt install -y ./eth-validator-stats_0.3.11-1_amd64.deb
 
 # 3. Set up config + start the service.
 sudo eth-validator-stats init --system           # writes config AND starts the service
@@ -97,7 +107,7 @@ sudo apt purge eth-validator-stats            # also wipes config + state + user
 #    Files: eth-validator-stats-<version>-1.fcXX.x86_64.rpm (or .aarch64.rpm)
 
 # 2. Install.
-sudo dnf install ./eth-validator-stats-0.3.10-1.fc40.x86_64.rpm
+sudo dnf install ./eth-validator-stats-0.3.11-1.fc40.x86_64.rpm
 
 # 3. Set up config + start the service.
 sudo eth-validator-stats init --system           # writes config AND starts the service

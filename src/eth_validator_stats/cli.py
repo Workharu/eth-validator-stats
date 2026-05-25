@@ -453,6 +453,15 @@ def cmd_init(args: argparse.Namespace) -> int:
         os.chmod(cfg_path, 0o644)
         _maybe_start_systemd_service()
 
+    if rc == 0:
+        # Surface the short alias right when the user is about to type
+        # their first real command. Most users only ever discover `evs`
+        # by reading the README.
+        print(
+            "\nTip: `evs` is a 3-character alias for eth-validator-stats. "
+            "Try `evs status` or `evs check`.\n"
+        )
+
     return rc
 
 

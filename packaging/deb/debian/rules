@@ -43,6 +43,11 @@ override_dh_auto_install:
 	# PBS tree otherwise carries the buildroot path. grep -I skips binaries.
 	grep -rlI "$(CURDIR)/$(DESTDIR)" $(DESTDIR)/opt/eth-validator-stats 2>/dev/null \
 	    | xargs -r sed -i 's|$(CURDIR)/$(DESTDIR)||g'
-	# /usr/bin entrypoint symlink.
+	# /usr/bin entrypoint symlinks — both the canonical long name and
+	# the short `evs` alias declared in pyproject.toml's [project.scripts].
+	# Without the second symlink, `evs status` returns "command not found"
+	# even though the binary exists at .../venv/bin/evs.
 	ln -sf /opt/eth-validator-stats/venv/bin/eth-validator-stats \
 	       $(DESTDIR)/usr/bin/eth-validator-stats
+	ln -sf /opt/eth-validator-stats/venv/bin/evs \
+	       $(DESTDIR)/usr/bin/evs

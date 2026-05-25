@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from ..alerts import AlertsConfig, NtfyNotifier
+from ..alerts import AlertsConfig, DEFAULT_NTFY_ICON_URL, NtfyNotifier
 from ..beacon import BeaconClient, ValidatorInfo
 from ..config_io import AppConfig, ConfigEntry, write_config
 from .portscan import Found, scan as default_scan
@@ -43,7 +43,11 @@ def _default_beacon_factory(url: str, *, auth_token: str | None = None):
 
 
 def _default_notifier_factory(topic_url: str):
-    return NtfyNotifier(topic_url)
+    # Include the default icon URL so the verification push during
+    # `init` looks the same as every real alert that follows.
+    # Without this the test push arrives icon-less and users wonder
+    # why their first push doesn't match the documented behavior.
+    return NtfyNotifier(topic_url, icon_url=DEFAULT_NTFY_ICON_URL)
 
 
 def _render_qr_for_terminal(url: str) -> str:

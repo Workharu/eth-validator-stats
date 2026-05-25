@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.10
+Version:        0.3.11
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -116,8 +116,12 @@ find %{buildroot}/opt/%{name} -name '*.pyc' -delete
 grep -rlI "%{buildroot}" %{buildroot}/opt/%{name} 2>/dev/null \
     | xargs -r sed -i "s|%{buildroot}||g"
 
-# Symlink /usr/bin entrypoint.
+# Symlink /usr/bin entry points — both the canonical long name and the
+# short `evs` alias declared in pyproject.toml's [project.scripts].
+# Without the second symlink, `evs status` returns "command not found"
+# even though the binary exists at .../venv/bin/evs.
 ln -sf /opt/%{name}/venv/bin/%{name} %{buildroot}%{_bindir}/%{name}
+ln -sf /opt/%{name}/venv/bin/evs %{buildroot}%{_bindir}/evs
 
 # Write the systemd unit.
 cat > %{buildroot}%{_unitdir}/%{name}.service <<'EOF'
@@ -219,12 +223,25 @@ fi
 /opt/%{name}/python
 /opt/%{name}/venv
 %{_bindir}/%{name}
+%{_bindir}/evs
 %{_unitdir}/%{name}.service
 # The config and state directories are intentionally NOT listed here:
 # the post-install scriptlet creates them so the package does not own the
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.11-1
+- New: one-liner installer at scripts/install.sh that handles .deb,
+  .rpm, and pipx fallback from a single curl-pipe-to-bash command.
+- Fix: `evs status` returned "command not found" after a .rpm
+  install. The spec now symlinks both names into /usr/bin and the
+  files manifest lists both.
+- Fix: arrow keys work during `init` prompts (added `import
+  readline` to the CLI entry path).
+- Fix: ntfy verification push sent by `init` now carries the
+  project icon, matching every real alert that follows.
+- UX: `init` prints a tip about the `evs` alias on success.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.10-1
 - Fix: `sudo eth-validator-stats init` (without --system) on an
   .rpm-installed host previously wrote the config to

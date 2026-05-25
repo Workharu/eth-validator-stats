@@ -1,3 +1,27 @@
+eth-validator-stats (0.3.11-1) unstable; urgency=medium
+
+  * New: one-liner installer at scripts/install.sh. Auto-detects OS
+    (Debian/Ubuntu, Fedora/RHEL, macOS) and arch (amd64/arm64), pulls
+    the matching .deb / .rpm / pipx artifact from the latest GitHub
+    Release. README's Install section now leads with:
+        curl -fsSL https://raw.githubusercontent.com/Workharu/.../scripts/install.sh | sudo bash
+  * Fix: `evs status` returned "command not found" after a .deb
+    install. The pyproject [project.scripts] declared the alias but
+    debian/rules only symlinked the canonical name into /usr/bin/.
+    Both `eth-validator-stats` and `evs` are now linked.
+  * Fix: arrow keys (and other line-editing) work in `init` prompts.
+    Without `import readline`, Python's built-in input() printed raw
+    escape sequences like `^[[D` when the user hit left/right arrow.
+  * Fix: the ntfy verification push sent by `init` now carries the
+    project icon, matching every real alert that follows. The
+    onboarding wizard was constructing NtfyNotifier without
+    forwarding icon_url, so the very first push the user saw was
+    icon-less even though saved-config pushes had the icon.
+  * UX: `init` now prints a tip about the `evs` alias on success, so
+    users discover the shortcut on the same screen they finish setup.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 17:09:32 +0000
+
 eth-validator-stats (0.3.10-1) unstable; urgency=medium
 
   * Fix: `sudo eth-validator-stats init` (without `--system`) on a
