@@ -1,7 +1,7 @@
 # Disable the debugsource / debuginfo subpackages. Our package bundles a
 # pre-built Python venv; there are no source files for RPM to extract debug
 # symbols from, and Fedora's default policy would otherwise fail with
-# "Empty %files file ... debugsourcefiles.list".
+# "Empty files file ... debugsourcefiles.list".
 %global debug_package %{nil}
 
 # Disable the brp-check-rpaths step. The bundled python-build-standalone
@@ -202,7 +202,12 @@ fi
 # On full uninstall ($1 == 0), clean up the bundled tree. The Python
 # interpreter creates __pycache__/*.pyc at runtime that rpm doesn't own,
 # leaving non-empty dirs behind otherwise. $1 != 0 is an upgrade, so we
-# leave files in place — the new version's %install will overwrite.
+# leave files in place — the new version's install phase will overwrite.
+# (Reminder for future edits: never write percent-prefixed section
+# keywords (install / post / postun / files / prep / build / changelog)
+# anywhere in this spec outside their actual section headers. rpmbuild
+# matches the keyword by name regardless of position, even inside a
+# shell comment, and aborts with "second <section>".)
 if [ $1 -eq 0 ]; then
     rm -rf /opt/%{name}
 fi
@@ -235,10 +240,10 @@ fi
   a system install without sudo or group membership. If you do put
   a `beacon_auth_token` for a hosted provider in the file, tighten
   to 0640 manually.
-- Fix: %post auto-upgrades existing config files that are still at
+- Fix: post-install scriptlet auto-upgrades existing config files that are still at
   the old 0640 default to 0644 on `dnf install`. Files at any other
   mode are left alone.
-- Fix: %postun on full uninstall ($1 == 0) now `rm -rf /opt/<pkg>`
+- Fix: post-uninstall scriptlet on full uninstall ($1 == 0) now `rm -rf /opt/<pkg>`
   so leftover __pycache__/*.pyc files created by the bundled Python
   interpreter at runtime don't keep the venv dirs around.
 
@@ -272,7 +277,7 @@ fi
 - Internal: uses `systemctl restart` (not `start`) so re-running
   `init --system --force` after a config edit picks up the new
   config without a separate restart step.
-- Docs: %post first-install message simplified to a single
+- Docs: post-install scriptlet message simplified to a single
   "Next step: sudo eth-validator-stats init --system". Same for the
   .deb postinst message and the four README install sections.
 
