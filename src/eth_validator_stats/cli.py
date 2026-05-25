@@ -774,6 +774,14 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
+class _LogLevel(str, _Enum):
+    """Valid values for --log-level. Mirrors argparse's old `choices=[...]`."""
+    DEBUG = "DEBUG"
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+
 # Generated dynamically from the EVENTS dict so the two cannot drift. Member
 # names are the event keys with hyphens swapped for underscores (Python identifier
 # rules); each member's .value is the original key string, which cmd_simulate
@@ -797,9 +805,10 @@ app = typer.Typer(
 @app.callback()
 def _root(
     ctx: typer.Context,
-    log_level: str | None = typer.Option(
+    log_level: _LogLevel | None = typer.Option(
         None, "--log-level",
         help="Log level for stderr output (default: INFO; override via ETH_VALIDATOR_STATS_LOG_LEVEL).",
+        case_sensitive=False,
     ),
     version: bool = typer.Option(
         False, "--version",
@@ -808,7 +817,7 @@ def _root(
     ),
 ) -> None:
     """Root callback: applies --log-level, handles --version eagerly."""
-    configure_logging(log_level)
+    configure_logging(log_level.value if log_level is not None else None)
 
 
 @app.command()
@@ -975,14 +984,12 @@ def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns int exit code (does NOT raise SystemExit) so the
     existing test suite that calls `rc = main([...])` continues to work."""
     try:
+        # standalone_mode=False makes Click absorb typer.Exit(code=N) internally
+        # and return N as the call result instead of re-raising.
         result = app(args=argv, standalone_mode=False)
-        # In standalone_mode=False, typer.Exit(code=N) causes app() to return N
-        # directly rather than raising. Honour that code.
         if isinstance(result, int):
             return result
         return 0
-    except click.exceptions.Exit as e:
-        return int(e.exit_code)
     except click.exceptions.UsageError as e:
         e.show()
         return e.exit_code  # Click default for UsageError is 2
