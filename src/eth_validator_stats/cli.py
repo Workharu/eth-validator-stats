@@ -318,21 +318,25 @@ def _rows_from_state(cfg: AppConfig, state: dict) -> list[DisplayRow]:
     vstate = state.get("validators", {})
     rows: list[DisplayRow] = []
     for entry in cfg.validators:
+        key: str | None = None
         record: dict | None = None
         # Match by pubkey first (canonical), index second (legacy entries).
         if entry.pubkey is not None:
             pk = entry.pubkey.lower()
-            for rec in vstate.values():
+            for k, rec in vstate.items():
                 if rec.get("pubkey", "").lower() == pk:
-                    record = rec
+                    key, record = k, rec
                     break
         if record is None and entry.index is not None:
-            record = vstate.get(str(entry.index))
-        if record is None:
+            idx_key = str(entry.index)
+            rec = vstate.get(idx_key)
+            if rec is not None:
+                key, record = idx_key, rec
+        if record is None or key is None:
             continue
         rows.append(
             DisplayRow(
-                index=int(next(k for k, v in vstate.items() if v is record)),
+                index=int(key),
                 label=entry.label,
                 status=str(record.get("last_status", "unknown")),
                 balance_gwei=int(record.get("last_balance_gwei", 0)),
