@@ -217,6 +217,30 @@ def test_list_with_status_hits_beacon(tmp_path: Path, monkeypatch, capsys):
     assert "32.1" in out  # balance
 
 
+def test_list_status_resolves_pubkey_only_entries(tmp_path: Path, monkeypatch, capsys):
+    """Regression: a config entry saved with only `pubkey:` (no index)
+    has e.index = None. The status table was looking up live state by
+    e.index, so pubkey-only entries showed "—" even when the beacon
+    returned data. Cross-key lookup via pubkey fixes that.
+    """
+    _write_initial_config(
+        tmp_path, monkeypatch,
+        "  - pubkey: '0xabc'\n    label: pubkey-only\n",
+    )
+    _patch_bc(monkeypatch, [
+        ValidatorInfo(index=777, pubkey="0xabc", status="active_ongoing", balance_gwei=32_500_000_000),
+    ])
+
+    rc = vmod.cmd_validators_list(_args(status=True))
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "active_ongoing" in out, (
+        "expected live status from beacon to populate the row for the "
+        "pubkey-only entry, but the row appears to show '—'"
+    )
+    assert "32.5" in out
+
+
 # --- rm ----------------------------------------------------------------------
 
 def test_rm_by_index(tmp_path: Path, monkeypatch):

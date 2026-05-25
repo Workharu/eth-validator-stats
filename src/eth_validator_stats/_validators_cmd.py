@@ -171,8 +171,16 @@ def cmd_validators_add(args: argparse.Namespace) -> int:
     _atomic_write_preserving_perms(updated, _resolve_path_to_write())
 
     label_suffix = f" ({new_entry.label})" if new_entry.label else ""
-    idx_repr = canonical_index if canonical_index is not None else "?"
-    print(f"✓ added validator {idx_repr}{label_suffix}")
+    # Identify the entry in the success message even when --no-verify left
+    # canonical_index unresolved (saved-by-pubkey case): fall back to a
+    # shortened pubkey so the user always sees what got written.
+    if canonical_index is not None:
+        ident_echo = str(canonical_index)
+    elif canonical_pubkey is not None:
+        ident_echo = _shorten_pubkey(canonical_pubkey)
+    else:
+        ident_echo = "?"
+    print(f"✓ added validator {ident_echo}{label_suffix}")
     _restart_service_if_installed()
     return 0
 
@@ -194,7 +202,12 @@ def cmd_validators_list(args: argparse.Namespace) -> int:
     from rich.console import Console
     from rich.table import Table
 
-    live: dict[int, object] = {}
+    # When --status, key the beacon response by BOTH index and pubkey so
+    # pubkey-only config entries (which have e.index = None) still find
+    # their live row in the lookup. get_validators returns items in
+    # arbitrary order, so a per-entry positional pair-up isn't safe.
+    live_by_index: dict[int, object] = {}
+    live_by_pubkey: dict[str, object] = {}
     if args.status:
         try:
             with BeaconClient(
@@ -202,7 +215,9 @@ def cmd_validators_list(args: argparse.Namespace) -> int:
                 auth_token=cfg.beacon_auth_token or None,
             ) as bc:
                 vs = bc.get_validators([e.identifier for e in cfg.validators])
-            live = {v.index: v for v in vs}
+            for v in vs:
+                live_by_index[v.index] = v
+                live_by_pubkey[v.pubkey.lower()] = v
         except Exception as e:
             print(
                 f"warning: --status: could not reach beacon node ({e}); "
@@ -225,7 +240,11 @@ def cmd_validators_list(args: argparse.Namespace) -> int:
             _shorten_pubkey(e.pubkey),
         ]
         if args.status:
-            v = live.get(e.index) if e.index is not None else None
+            v: object | None = None
+            if e.index is not None:
+                v = live_by_index.get(e.index)
+            if v is None and e.pubkey is not None:
+                v = live_by_pubkey.get(e.pubkey.lower())
             if v is not None:
                 row.append(getattr(v, "status", ""))
                 bal = getattr(v, "balance_gwei", 0) / 1_000_000_000
@@ -276,7 +295,15 @@ def cmd_validators_rm(args: argparse.Namespace) -> int:
         return 1
 
     victim = matches[0]
-    desc = f"index {victim.index}"
+    # Identify the victim in the prompt regardless of which key it was
+    # saved by — pubkey-only entries have .index = None and would
+    # otherwise show "index None" to the user.
+    if victim.index is not None:
+        desc = f"index {victim.index}"
+    elif victim.pubkey is not None:
+        desc = f"pubkey {_shorten_pubkey(victim.pubkey)}"
+    else:
+        desc = "unknown"
     if victim.label:
         desc += f" ({victim.label})"
 

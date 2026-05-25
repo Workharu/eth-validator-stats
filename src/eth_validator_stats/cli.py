@@ -778,6 +778,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     val_sub = p_val.add_subparsers(dest="val_cmd", required=True)
 
+    from ._validators_cmd import (
+        cmd_validators_add as _cmd_val_add,
+        cmd_validators_list as _cmd_val_list,
+        cmd_validators_rm as _cmd_val_rm,
+    )
+
     p_val_add = val_sub.add_parser(
         "add",
         help="Add a validator by pubkey (0x...) or numeric index.",
@@ -791,7 +797,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-verify", action="store_true",
         help="Skip the beacon-node existence check. Saves the entry as-is.",
     )
-    from ._validators_cmd import cmd_validators_add as _cmd_val_add
     p_val_add.set_defaults(func=_cmd_val_add)
 
     p_val_list = val_sub.add_parser(
@@ -802,7 +807,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--status", action="store_true",
         help="Also hit the beacon node for live status + balance.",
     )
-    from ._validators_cmd import cmd_validators_list as _cmd_val_list
     p_val_list.set_defaults(func=_cmd_val_list)
 
     p_val_rm = val_sub.add_parser(
@@ -817,7 +821,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--yes", action="store_true",
         help="Skip the confirmation prompt.",
     )
-    from ._validators_cmd import cmd_validators_rm as _cmd_val_rm
     p_val_rm.set_defaults(func=_cmd_val_rm)
 
     return parser
