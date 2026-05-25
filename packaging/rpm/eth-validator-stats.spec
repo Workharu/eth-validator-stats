@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.7
+Version:        0.3.8
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -220,6 +220,15 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.8-1
+- New: every ntfy push now carries a branded app icon. The default
+  URL points at assets/notification-icon.png in this repo, served
+  via raw.githubusercontent.com. ntfy clients (Android, iOS, web)
+  fetch and cache the image, so it's instantly recognizable as a
+  push from eth-validator-stats. Configurable via `alerts.icon_url`
+  — set to "" to disable, or to your own URL to brand pushes
+  differently.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.7-1
 - Fix: `init --system` now writes /etc/<pkg>/config.yml with mode
   0644 instead of 0640. Any user can run read-only commands against

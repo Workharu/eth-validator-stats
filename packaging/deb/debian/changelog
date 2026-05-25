@@ -1,3 +1,15 @@
+eth-validator-stats (0.3.8-1) unstable; urgency=medium
+
+  * New: every ntfy push now carries a branded app icon. The default
+    URL points at assets/notification-icon.png in this repo, served
+    via raw.githubusercontent.com. ntfy clients (Android, iOS, web)
+    fetch and cache the image, so it's instantly recognizable as a
+    push from eth-validator-stats. Configurable via
+    `alerts.icon_url` — set to "" to disable, or to your own URL to
+    brand pushes differently.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 08:44:43 +0000
+
 eth-validator-stats (0.3.7-1) unstable; urgency=medium
 
   * Fix: `init --system` now writes /etc/<pkg>/config.yml with mode
