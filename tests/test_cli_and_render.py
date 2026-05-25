@@ -312,3 +312,32 @@ def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
     assert rc == 0
     assert poll_called["v"] is True
     assert save_called["v"] is True
+
+
+def test_cmd_status_prints_staleness_footer(monkeypatch, tmp_path, capsys):
+    """When state has a last_poll_ts, status prints a 'last updated' line
+    so the user can spot a dead watcher."""
+    import json, time as _time
+    from eth_validator_stats import cli as cli_mod
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({
+        "chain_info": None,
+        "current_slot": 0,
+        "last_poll_ts": 1_700_000_000,
+        "validators": {},
+    }))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(state_file))
+    # Freeze "now" 125 seconds after the last poll.
+    monkeypatch.setattr(_time, "time", lambda: 1_700_000_125.0)
+
+    class _Cfg: validators = []
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+
+    import argparse
+    rc = cli_mod.cmd_status(argparse.Namespace(refresh=False))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "last updated" in out.lower()
+    # 125 seconds ago should render as "2m" or "2 min" — accept either.
+    assert "2m" in out or "2 min" in out

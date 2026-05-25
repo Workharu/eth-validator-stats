@@ -346,6 +346,23 @@ def _rows_from_state(cfg: AppConfig, state: dict) -> list[DisplayRow]:
     return rows
 
 
+def _format_staleness(last_poll_ts: int | None, now_ts: int) -> str | None:
+    """Return a short 'last updated' string, or None if no poll has happened.
+    Granularity is coarse on purpose — operators want 'is it alive?' not exact seconds."""
+    if not last_poll_ts:
+        return None
+    delta = max(0, now_ts - int(last_poll_ts))
+    if delta < 60:
+        human = f"{delta}s ago"
+    elif delta < 3600:
+        human = f"{delta // 60}m ago"
+    elif delta < 86400:
+        human = f"{delta // 3600}h ago"
+    else:
+        human = f"{delta // 86400}d ago"
+    return f"last updated: {human}"
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     cfg = load_config()
     state = load_state(state_path())
@@ -354,7 +371,11 @@ def cmd_status(args: argparse.Namespace) -> int:
         save_state(state_path(), state)
     else:
         rows = _rows_from_state(cfg, state)
-    Console().print(build_table(rows, n_atts=N_ATTS_DISPLAYED))
+    console = Console()
+    console.print(build_table(rows, n_atts=N_ATTS_DISPLAYED))
+    footer = _format_staleness(state.get("last_poll_ts"), int(time.time()))
+    if footer:
+        console.print(f"[dim]{footer}[/dim]")
     return 0
 
 
