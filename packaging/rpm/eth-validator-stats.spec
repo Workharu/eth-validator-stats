@@ -162,7 +162,8 @@ exit 0
 # Create config + state dirs here (not in the install section) so RPM doesn't
 # own them, which means user-created files inside survive `rpm -e`.
 mkdir -p /etc/%{name} /var/lib/%{name}
-chown -R eth-validator-stats:eth-validator-stats /etc/%{name} /var/lib/%{name}
+chown eth-validator-stats:eth-validator-stats /etc/%{name}
+chown -R eth-validator-stats:eth-validator-stats /var/lib/%{name}
 # /etc dir: 0755 so non-group users can at least see the file exists
 # (standard for /etc). The config file itself is created with 0640 by
 # `init --system`, so secrets stay group-read-only.
