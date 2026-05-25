@@ -67,16 +67,54 @@ def load_config(path: Path | None = None) -> AppConfig:
             )
     else:
         p = path
-    if not p.exists():
+
+    # Use the EACCES-aware helper here too — when the resolver returned a
+    # path that exists but the system config IS unreadable, we want a
+    # specific error message rather than a generic "not found".
+    exists = _exists_safely(p)
+    if exists is None:
+        # Path stat raised EACCES. Almost certainly the system config in
+        # /etc that the caller can't traverse to.
         raise SystemExit(
-            f"config file not found at {p}\n"
-            f"Run 'eth-validator-stats init' to create one."
+            f"config at {p} exists but is not readable by the current user.\n"
+            f"\n"
+            f"Either:\n"
+            f"  - Re-run with sudo:  sudo eth-validator-stats <cmd>\n"
+            f"  - Or add yourself to the eth-validator-stats group, then log out\n"
+            f"    and back in:        sudo usermod -aG eth-validator-stats $USER"
         )
+    if exists is False:
+        # Nothing at the resolved path. If a system config exists but is
+        # not readable, surface that — otherwise the user would chase the
+        # ~/.config path and wonder why init seemingly didn't write anything.
+        msg = f"config file not found at {p}\nRun 'eth-validator-stats init' to create one."
+        if path is None and _exists_safely(SYSTEM_CONFIG_PATH) is None:
+            msg += (
+                f"\n\nNote: {SYSTEM_CONFIG_PATH} appears to exist but is not\n"
+                f"readable as the current user. To use the system config:\n"
+                f"  sudo eth-validator-stats <cmd>\n"
+                f"  # or add yourself to the eth-validator-stats group:\n"
+                f"  sudo usermod -aG eth-validator-stats $USER  (log out and back in)"
+            )
+        raise SystemExit(msg)
+
+    try:
+        text = p.read_text()
+    except PermissionError as e:
+        raise SystemExit(
+            f"config at {p} is not readable by the current user ({e.strerror}).\n"
+            f"\n"
+            f"Either:\n"
+            f"  - Re-run with sudo:  sudo eth-validator-stats <cmd>\n"
+            f"  - Or add yourself to the eth-validator-stats group, then log out\n"
+            f"    and back in:        sudo usermod -aG eth-validator-stats $USER"
+        )
+
     if p.suffix in (".yml", ".yaml"):
-        raw = yaml.safe_load(p.read_text()) or {}
+        raw = yaml.safe_load(text) or {}
     elif p.suffix == ".toml":
         import tomllib
-        raw = tomllib.loads(p.read_text())
+        raw = tomllib.loads(text)
     else:
         raise SystemExit(f"unsupported config suffix: {p.suffix}")
     return _parse_config(raw)
@@ -115,6 +153,30 @@ def write_config(cfg: AppConfig, path: Path) -> None:
     tmp.replace(path)
 
 
+def _exists_safely(p: Path) -> bool | None:
+    """Like Path.exists() but tolerant of EACCES.
+
+    Python 3.11+ changed Path.exists() so it propagates PermissionError
+    instead of swallowing it. That bites us when /etc/eth-validator-stats
+    is mode 0750 (traversal denied for "other") and the CLI is invoked
+    by a regular non-group user — the resolver would crash with a stack
+    trace just trying to *check* whether a system config is present.
+
+    Three-valued return:
+      True   — file exists and is at least stat-able
+      False  — file definitely does not exist
+      None   — we cannot tell (parent dir denies traversal, file denies
+               metadata access, etc.)
+    The resolver treats None like False for path-selection purposes but
+    keeps the information around so load_config() can surface a helpful
+    "use sudo or join the group" hint when nothing else is found.
+    """
+    try:
+        return p.exists()
+    except PermissionError:
+        return None
+
+
 def _resolve_existing_config() -> tuple[Path, bool]:
     """Find the first existing config file along the search chain.
 
@@ -129,11 +191,16 @@ def _resolve_existing_config() -> tuple[Path, bool]:
     Returns (path, is_legacy_auto_resolved). The path is the first match.
     If nothing exists, returns the per-user YAML path so error messages and
     init writes both point at the same conventional location.
+
+    Permission denied on the system path is treated the same as "absent" for
+    selection purposes — load_config() detects the EACCES separately and
+    rewrites the not-found error into an actionable "use sudo or join the
+    group" message.
     """
     override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
     if override:
         return (Path(override), False)
-    if SYSTEM_CONFIG_PATH.exists():
+    if _exists_safely(SYSTEM_CONFIG_PATH) is True:
         return (SYSTEM_CONFIG_PATH, False)
     yml = config_path()
     if yml.exists():

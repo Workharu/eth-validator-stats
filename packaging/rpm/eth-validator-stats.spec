@@ -159,7 +159,12 @@ exit 0
 # own them, which means user-created files inside survive `rpm -e`.
 mkdir -p /etc/%{name} /var/lib/%{name}
 chown -R eth-validator-stats:eth-validator-stats /etc/%{name} /var/lib/%{name}
-chmod 0750 /etc/%{name} /var/lib/%{name}
+# /etc dir: 0755 so non-group users can at least see the file exists
+# (standard for /etc). The config file itself is created with 0640 by
+# `init --system`, so secrets stay group-read-only.
+# /var/lib dir: 0750, only the service user touches state.
+chmod 0755 /etc/%{name}
+chmod 0750 /var/lib/%{name}
 %systemd_post %{name}.service
 
 if [ $1 -eq 1 ] ; then

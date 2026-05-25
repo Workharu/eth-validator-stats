@@ -268,6 +268,90 @@ def test_resolver_falls_back_to_user_config_when_no_system_config(
     assert cfg.beacon_node_url == "http://from-resolver"
 
 
+def test_exists_safely_handles_permission_denied():
+    """The helper must return None (not raise) on EACCES."""
+    from eth_validator_stats.config_io import _exists_safely
+
+    class _DeniedPath:
+        def exists(self):
+            raise PermissionError(13, "Permission denied")
+
+    assert _exists_safely(_DeniedPath()) is None
+
+
+def test_resolver_skips_unreadable_system_config(tmp_path: Path, monkeypatch):
+    """A PermissionError on the system path must not crash the resolver.
+
+    Regression for the 0.3.5 traceback when a non-root user ran
+    `eth-validator-stats status` against an .deb install whose
+    /etc/eth-validator-stats was mode 0750 (no traversal for `other`).
+    """
+    fake_user = tmp_path / "home" / "config.yml"
+    fake_user.parent.mkdir(parents=True)
+    fake_user.write_text("beacon_node_url: http://from-user\nvalidators:\n  - index: 1\n")
+
+    class _DeniedPath:
+        def exists(self):
+            raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(
+        "eth_validator_stats.config_io.SYSTEM_CONFIG_PATH", _DeniedPath()
+    )
+    monkeypatch.setattr("platformdirs.user_config_path", lambda _: fake_user.parent)
+    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
+
+    # Must not raise; falls through to the per-user config.
+    cfg = load_config()
+    assert cfg.beacon_node_url == "http://from-user"
+
+
+def test_load_config_unreadable_explicit_path_gives_helpful_message(tmp_path: Path):
+    """When the caller passes a specific path that EACCES's on stat, the
+    error message must point at sudo / group fix, not just propagate the
+    raw PermissionError."""
+
+    class _DeniedPath:
+        suffix = ".yml"
+        def exists(self):
+            raise PermissionError(13, "Permission denied")
+        def __str__(self):
+            return "/etc/eth-validator-stats/config.yml"
+
+    with pytest.raises(SystemExit) as exc:
+        load_config(_DeniedPath())  # type: ignore[arg-type]
+    msg = str(exc.value)
+    assert "not readable" in msg
+    assert "sudo" in msg
+    assert "eth-validator-stats" in msg
+
+
+def test_load_config_unreadable_system_with_no_user_config_hints_at_sudo(
+    tmp_path: Path, monkeypatch, capsys
+):
+    """When the resolver falls through to a non-existent ~/.config and the
+    /etc path is unreadable, the not-found error includes a hint about the
+    inaccessible system config."""
+    class _DeniedPath:
+        def exists(self):
+            raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(
+        "eth_validator_stats.config_io.SYSTEM_CONFIG_PATH", _DeniedPath()
+    )
+    monkeypatch.setattr(
+        "platformdirs.user_config_path",
+        lambda _: tmp_path / "no-such-home" / ".config",
+    )
+    monkeypatch.delenv("ETH_VALIDATOR_STATS_CONFIG", raising=False)
+
+    with pytest.raises(SystemExit) as exc:
+        load_config()
+    msg = str(exc.value)
+    assert "config file not found" in msg
+    assert "appears to exist but is not" in msg
+    assert "sudo eth-validator-stats" in msg
+
+
 def test_resolver_env_override_wins_over_system_and_user(
     tmp_path: Path, monkeypatch
 ):
