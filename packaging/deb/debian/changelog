@@ -1,3 +1,19 @@
+eth-validator-stats (0.3.10-1) unstable; urgency=medium
+
+  * Fix: `sudo eth-validator-stats init` (without `--system`) on a
+    .deb-installed host previously wrote the config to
+    /root/.config/eth-validator-stats/config.yml — because HOME=/root
+    under sudo and platformdirs follows XDG. The systemd unit looks
+    at /etc/eth-validator-stats/config.yml, so the service got
+    permanently stuck "inactive (dead) - start condition unmet".
+    Init now auto-promotes to --system when EUID==0 and the
+    eth-validator-stats system user exists, prints a clear "writing
+    the system config" note, and starts the service as usual. The
+    escape hatch for the rare "root but per-user path" case is to
+    set ETH_VALIDATOR_STATS_CONFIG to the desired location.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 10:16:21 +0000
+
 eth-validator-stats (0.3.9-1) unstable; urgency=medium
 
   * Fix (.rpm only): the v0.3.8 rpm build failed with

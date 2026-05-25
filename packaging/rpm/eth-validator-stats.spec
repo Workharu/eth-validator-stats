@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.9
+Version:        0.3.10
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -225,6 +225,17 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.10-1
+- Fix: `sudo eth-validator-stats init` (without --system) on an
+  .rpm-installed host previously wrote the config to
+  /root/.config/eth-validator-stats/config.yml — because HOME=/root
+  under sudo. The systemd unit looks at /etc/.../config.yml, so the
+  service got permanently stuck "inactive (dead) - start condition
+  unmet". Init now auto-promotes to --system when EUID==0 and the
+  eth-validator-stats system user exists. The escape hatch for the
+  rare "root but per-user path" case is to set
+  ETH_VALIDATOR_STATS_CONFIG explicitly.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.9-1
 - Fix: this spec now compiles — bare section keywords (install /
   post / postun / files) inside shell comments and changelog text
