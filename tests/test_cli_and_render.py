@@ -412,3 +412,32 @@ def test_main_returns_int_on_help_exit():
     rc = main(["status", "--help"])
     assert isinstance(rc, int)
     assert rc == 0
+
+
+def test_main_returns_int_when_init_system_used_without_root(monkeypatch):
+    """`init --system` as non-root must return 1 from main(), not raise SystemExit.
+    Regresses a real leak where cmd_init's raise SystemExit(1) bypassed the wrapper."""
+    from eth_validator_stats.cli import main
+
+    # Force the non-root path. `cmd_init` uses os.geteuid() != 0.
+    monkeypatch.setattr("os.geteuid", lambda: 1000)
+
+    # Disable any auto-promotion logic so we hit the --system-without-root branch.
+    rc = main(["init", "--system", "--no-ntfy", "--yes"])
+    assert isinstance(rc, int)
+    assert rc != 0
+
+
+def test_main_returns_nonzero_when_validators_subcommand_fails(monkeypatch):
+    """Sub-Typer command exit codes must propagate to main()'s int return.
+    Without this, `evs validators add bad-pubkey` returned 0 to the shell
+    even when the underlying handler returned 1."""
+    from eth_validator_stats.cli import main
+
+    # Mock the lazy-imported handler so we don't hit the beacon node.
+    import eth_validator_stats._validators_cmd as vmod
+    monkeypatch.setattr(vmod, "cmd_validators_add", lambda args: 1)
+
+    rc = main(["validators", "add", "0x" + "a" * 96, "--no-verify"])
+    assert isinstance(rc, int)
+    assert rc == 1

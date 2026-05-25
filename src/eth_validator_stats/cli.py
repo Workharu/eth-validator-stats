@@ -985,7 +985,9 @@ def main(argv: list[str] | None = None) -> int:
     existing test suite that calls `rc = main([...])` continues to work."""
     try:
         # standalone_mode=False makes Click absorb typer.Exit(code=N) internally
-        # and return N as the call result instead of re-raising.
+        # and return N as the call result for TOP-LEVEL commands. For sub-Typer
+        # commands (added via app.add_typer), the sub-app still calls sys.exit
+        # internally, which surfaces as a SystemExit caught below.
         result = app(args=argv, standalone_mode=False)
         if isinstance(result, int):
             return result
@@ -996,6 +998,15 @@ def main(argv: list[str] | None = None) -> int:
     except click.exceptions.ClickException as e:
         e.show()
         return e.exit_code
+    except SystemExit as e:
+        # cmd_init's `raise SystemExit(1)` path and sub-Typer Exit propagation.
+        if e.code is None:
+            return 0
+        if isinstance(e.code, int):
+            return e.code
+        # Non-int code (string): treat as failure with stderr message.
+        print(e.code, file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
