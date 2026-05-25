@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="86.66666666666667 110 346.6666666666667 346.6666666666667" width="512" height="512">
+  
+  <!-- Center everything using a transform -->
+  <g transform="translate(250 250)">
+    
+    <!-- Magnifying Glass Handle -->
+    <rect x="85" y="85" width="40" height="110" rx="20" transform="rotate(-45 105 140)" fill="#A1D193"/>
+    
+    <!-- Magnifying Glass Outer Ring -->
+    <circle cx="0" cy="0" r="110" fill="#A1D193"/>
+    
+    <!-- Magnifying Glass Inner Glass Area -->
+    <circle cx="0" cy="0" r="85" fill="#E2F0D9"/>
+    
+    <!-- Ethereum Prism Symbol -->
+    <g>
+      <!-- Top Left Facet -->
+      <polygon points="0,-65 -35,0 0,15" fill="#C5E0B4"/>
+      <!-- Top Right Facet -->
+      <polygon points="0,-65 35,0 0,15" fill="#A1D193"/>
+      <!-- Bottom Left Facet -->
+      <polygon points="0,25 -35,5 0,65" fill="#A1D193"/>
+      <!-- Bottom Right Facet -->
+      <polygon points="0,25 35,5 0,65" fill="#7CBA69"/>
+    </g>
+
+  </g>
+</svg>

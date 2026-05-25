@@ -9,6 +9,12 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
+DEFAULT_NTFY_ICON_URL = (
+    "https://raw.githubusercontent.com/Workharu/eth-validator-stats/"
+    "main/assets/notification-icon.png"
+)
+
+
 @dataclass(frozen=True)
 class AlertsConfig:
     ntfy_topic: str = ""
@@ -22,6 +28,10 @@ class AlertsConfig:
     # impossible to distinguish a real withdrawal from cumulative attestation losses.
     withdrawal_max_gap_slots: int = 64
     proposal_lookahead_epochs: int = 1
+    # URL fetched by the ntfy client to display next to each push. Default
+    # points at the icon shipped in this repo, served via raw.githubusercontent.
+    # Set to "" to suppress; set to your own URL to brand pushes differently.
+    icon_url: str = DEFAULT_NTFY_ICON_URL
 
 
 class Notifier(Protocol):
@@ -41,21 +51,26 @@ class NtfyNotifier:
         timeout: float = 5.0,
         transport: httpx.BaseTransport | None = None,
         raise_on_error: bool = False,
+        icon_url: str = "",
     ) -> None:
         self.topic_url = topic_url
         self.timeout = timeout
         self._transport = transport
         self._raise_on_error = raise_on_error
+        self.icon_url = icon_url
 
     def send(self, title: str, body: str) -> None:
         if not self.topic_url:
             return
+        headers = {"Title": title}
+        if self.icon_url:
+            headers["Icon"] = self.icon_url
         try:
             with httpx.Client(timeout=self.timeout, transport=self._transport) as c:
                 r = c.post(
                     self.topic_url,
                     content=body.encode("utf-8"),
-                    headers={"Title": title},
+                    headers=headers,
                 )
                 r.raise_for_status()
         except Exception as e:
@@ -66,7 +81,11 @@ class NtfyNotifier:
 
 def make_notifier(cfg: AlertsConfig) -> Notifier:
     if cfg.ntfy_topic:
-        return NtfyNotifier(cfg.ntfy_topic, timeout=cfg.request_timeout_s)
+        return NtfyNotifier(
+            cfg.ntfy_topic,
+            timeout=cfg.request_timeout_s,
+            icon_url=cfg.icon_url,
+        )
     return NullNotifier()
 
 

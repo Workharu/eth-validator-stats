@@ -289,6 +289,13 @@ The fastest way to wire this up is `eth-validator-stats init`, which generates a
 
 The public `ntfy.sh` server is free and Apache-2.0 open source. If you'd rather self-host, run `ntfy serve` on your beacon-node box and set `ntfy_topic` to `http://your-host:80/your-topic`.
 
+**Push icon:** every notification carries the eth-validator-stats icon (a small PNG served from this repo) so you can tell at a glance the push is from this tool. To override, set `alerts.icon_url` to any publicly-fetchable URL. To suppress entirely, set it to an empty string:
+```yaml
+alerts:
+  icon_url: ""
+```
+ntfy clients fetch the image at notification time and cache it; if the URL ever 404s the push still arrives, just without an icon.
+
 #### Alert intelligence
 
 - **Beacon-down detection** — if the beacon node is unreachable, you get one `MONITOR BLIND` push (not 1000 per-validator pushes), and one `MONITOR RECOVERED` when it comes back.

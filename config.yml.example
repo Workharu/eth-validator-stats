@@ -45,3 +45,9 @@ alerts:
   # How far ahead to pre-notify about an upcoming block proposal.
   # 1 epoch ≈ 6.4 min on mainnet. Set to 0 to disable upcoming-proposal alerts.
   proposal_lookahead_epochs: 1
+
+  # Icon shown next to each ntfy push on the phone. Leave the default to
+  # use the eth-validator-stats logo (served from this project's repo).
+  # Set to "" to suppress the icon. Set to your own publicly-fetchable
+  # URL to brand pushes differently.
+  # icon_url: ""

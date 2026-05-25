@@ -145,6 +145,7 @@ def write_config(cfg: AppConfig, path: Path) -> None:
         "withdrawal_threshold_gwei": cfg.alerts.withdrawal_threshold_gwei,
         "withdrawal_max_gap_slots": cfg.alerts.withdrawal_max_gap_slots,
         "proposal_lookahead_epochs": cfg.alerts.proposal_lookahead_epochs,
+        "icon_url": cfg.alerts.icon_url,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -254,6 +255,10 @@ def _parse_config(raw: dict) -> AppConfig:
     if not entries:
         raise SystemExit("config has no validators entries")
     alerts_raw = raw.get("alerts", {}) or {}
+    # icon_url omitted from config → fall back to the dataclass default
+    # (DEFAULT_NTFY_ICON_URL). Explicit empty string disables the icon.
+    from .alerts import DEFAULT_NTFY_ICON_URL
+    icon_url_raw = alerts_raw.get("icon_url", DEFAULT_NTFY_ICON_URL)
     alerts = AlertsConfig(
         ntfy_topic=str(alerts_raw.get("ntfy_topic", "") or ""),
         cooldown_minutes=int(alerts_raw.get("cooldown_minutes", 30)),
@@ -262,6 +267,7 @@ def _parse_config(raw: dict) -> AppConfig:
         withdrawal_threshold_gwei=int(alerts_raw.get("withdrawal_threshold_gwei", 1_000_000)),
         withdrawal_max_gap_slots=int(alerts_raw.get("withdrawal_max_gap_slots", 64)),
         proposal_lookahead_epochs=int(alerts_raw.get("proposal_lookahead_epochs", 1)),
+        icon_url=str(icon_url_raw if icon_url_raw is not None else ""),
     )
     return AppConfig(
         beacon_node_url=url,

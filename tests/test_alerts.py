@@ -589,3 +589,64 @@ def test_ntfy_notifier_empty_topic_never_raises_even_with_flag():
     """An empty topic short-circuits before any HTTP call; raise_on_error is moot."""
     n = NtfyNotifier("", timeout=1.0, raise_on_error=True)
     n.send("title", "body")  # must not raise
+
+
+# --- icon_url header (notifications get a branded image) -----------
+
+def test_ntfy_notifier_sends_icon_header_when_url_set():
+    """If icon_url is provided, POST must carry the Icon header."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, text="ok")
+
+    n = NtfyNotifier(
+        "https://ntfy.example/topic",
+        timeout=1.0,
+        transport=httpx.MockTransport(handler),
+        icon_url="https://example.com/icon.png",
+    )
+    n.send("title", "body")
+
+    # httpx normalizes header names to lowercase in Headers.
+    assert captured["headers"].get("icon") == "https://example.com/icon.png"
+    assert captured["headers"].get("title") == "title"
+
+
+def test_ntfy_notifier_omits_icon_header_when_url_empty():
+    """Empty icon_url == feature off; no Icon header in the POST."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["headers"] = dict(request.headers)
+        return httpx.Response(200, text="ok")
+
+    n = NtfyNotifier(
+        "https://ntfy.example/topic",
+        timeout=1.0,
+        transport=httpx.MockTransport(handler),
+        icon_url="",
+    )
+    n.send("title", "body")
+
+    assert "icon" not in captured["headers"]
+
+
+def test_make_notifier_forwards_icon_url_from_alerts_config():
+    """The factory must pass cfg.icon_url through to NtfyNotifier."""
+    cfg = AlertsConfig(
+        ntfy_topic="https://ntfy.example/topic",
+        icon_url="https://example.com/icon.png",
+    )
+    n = make_notifier(cfg)
+    assert isinstance(n, NtfyNotifier)
+    assert n.icon_url == "https://example.com/icon.png"
+
+
+def test_default_alerts_config_carries_repo_hosted_icon_url():
+    """A bare AlertsConfig() has a non-empty default icon_url so out-of-
+    the-box installs get a branded push without any extra config."""
+    cfg = AlertsConfig()
+    assert cfg.icon_url.startswith("https://raw.githubusercontent.com/")
+    assert "notification-icon.png" in cfg.icon_url
