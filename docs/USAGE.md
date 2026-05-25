@@ -39,6 +39,58 @@ All other lifecycle and health alerts ride the default priority.
 | `alerts.withdrawal_max_gap_slots` | `64` (~12.8 min) | Drops between snapshots wider than this are skipped (avoids false positives during a `check` outage) |
 | `alerts.proposal_lookahead_epochs` | `1` (~6 min) | How early to fire `proposing soon` |
 | `alerts.icon_url` | repo-hosted PNG | Push notification icon. `""` disables; any public URL works |
+| `alerts.daily_heartbeat` | `false` | Send a daily `MONITOR ALIVE` ntfy. Absence of the morning push tells you the monitor is dead. `init` defaults this to `true` when ntfy is configured. |
+| `alerts.daily_heartbeat_hour` | `9` | Local-time hour (0–23) when the daily push fires. |
+| `alerts.heartbeat_url` | `""` | If set, every successful poll POSTs to this URL. Compatible with healthchecks.io, Better Stack, Cronitor, self-hosted uptime-kuma, or any service that accepts an unauthenticated POST. See "Monitoring the monitor" below. |
+
+## Monitoring the monitor
+
+If `eth-validator-stats` itself dies — process crash, kernel panic, network outage, you forgot to renew your domain — your phone goes quiet, and silence is indistinguishable from "everything is fine." There are two layers to fix this.
+
+### Layer 1: daily heartbeat (zero setup)
+
+`init` enables this by default when ntfy is configured. Once a day at 9 AM local time, you get a low-content ntfy push:
+
+```
+MONITOR ALIVE
+2 validators tracked, 2 active_ongoing
+```
+
+The push itself is uninteresting — the **absence** is the signal. If you don't get your morning ping, the monitor is dead and you should investigate. To change the hour:
+
+```yaml
+alerts:
+  daily_heartbeat: true
+  daily_heartbeat_hour: 7   # send at 7 AM instead
+```
+
+Detection latency: up to 24 hours. Good enough for most validator operators; if you want tighter, add Layer 2.
+
+### Layer 2: external watchdog URL (5-minute detection)
+
+Set `alerts.heartbeat_url` to a URL that a third-party service polls. We POST to it on every successful watch cycle; if the service stops seeing posts, it pages you. The recommended provider is **[healthchecks.io](https://healthchecks.io/)** — it's open source, free for up to 20 checks, and has built-in ntfy integration so alerts route to your existing topic.
+
+**Setup (~90 seconds):**
+
+1. Go to [healthchecks.io](https://healthchecks.io/) → sign in with GitHub or Google (one click, no password).
+2. Click **Add Check**, give it a name, set the grace period to 10 min (or whatever you want).
+3. Copy the **Ping URL** (looks like `https://hc-ping.com/abc-123-def-456`).
+4. Paste into `config.yml`:
+   ```yaml
+   alerts:
+     heartbeat_url: https://hc-ping.com/abc-123-def-456
+   ```
+5. Back on the healthchecks.io check page, click **Integrations** → **ntfy** → paste your existing ntfy topic URL.
+6. Restart `eth-validator-stats` (`sudo systemctl restart eth-validator-stats` on `.deb`/`.rpm` installs).
+
+Now your existing ntfy topic gets both kinds of alerts — validator events from us, and "monitor itself is down" from healthchecks.io. No second app, no second account beyond healthchecks.io.
+
+Alternatives if you'd rather not use healthchecks.io:
+
+- **Better Stack** (free, 10 monitors) — modern UX, but routes notifications through their channels; takes one extra step to hook into ntfy.
+- **Self-hosted [uptime-kuma](https://github.com/louislam/uptime-kuma)** — Docker one-liner if you already run docker-compose somewhere.
+
+The `heartbeat_url` config field is provider-agnostic. We just POST to whatever URL you give us; any heartbeat-compatible service works.
 
 ## Push notifications (ntfy)
 

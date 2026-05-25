@@ -201,17 +201,243 @@ def test_configure_logging_explicit_arg_wins_over_env(monkeypatch):
 
 
 def test_version_flag_prints_version_and_exits_zero(capsys):
-    """`eth-validator-stats --version` prints `<prog> <semver>` and exits 0."""
+    """`eth-validator-stats --version` prints `<prog> <semver>` and returns 0."""
     import re
-
-    import pytest
 
     from eth_validator_stats.cli import main
 
-    with pytest.raises(SystemExit) as exc:
-        main(["--version"])
-    assert exc.value.code == 0
+    rc = main(["--version"])
+    assert rc == 0
     out = capsys.readouterr().out
     assert out.startswith("eth-validator-stats ")
     # Version may be a semver like "0.3.5" or the "unknown" fallback.
     assert re.search(r"(\d+\.\d+\.\d+|unknown)", out)
+
+
+def test_poll_records_last_poll_ts(monkeypatch):
+    """poll() must stamp state['last_poll_ts'] so status can show staleness."""
+    import time as _time
+
+    from eth_validator_stats.cli import poll
+    from eth_validator_stats.config_io import AppConfig
+
+    # Freeze time
+    monkeypatch.setattr(_time, "time", lambda: 1_700_000_000.0)
+
+    # Stub BeaconClient so we don't hit the network.
+    class _StubClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def get_chain_info(self):
+            from eth_validator_stats.beacon import ChainInfo
+            return ChainInfo(genesis_time=0, seconds_per_slot=12, slots_per_epoch=32)
+        def get_head(self):
+            from eth_validator_stats.beacon import Head
+            return Head(slot=100)
+        def get_validators(self, ids): return []
+        def get_liveness(self, epoch, indices): return {}
+        def get_proposer_duties(self, epoch): return []
+
+    monkeypatch.setattr("eth_validator_stats.cli.BeaconClient", lambda *a, **kw: _StubClient())
+
+    cfg = AppConfig(beacon_node_url="http://x", beacon_auth_token=None, validators=[], alerts=None)
+    state: dict = {}
+    poll(cfg, state)
+    assert state["last_poll_ts"] == 1_700_000_000
+
+
+def test_cmd_status_is_read_only_by_default(monkeypatch, tmp_path):
+    """`evs status` must not hit the beacon node or write state.
+    It renders whatever the watcher / cron has already produced."""
+    import json
+
+    from eth_validator_stats import cli as cli_mod
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({
+        "chain_info": {"genesis_time": 0, "seconds_per_slot": 12, "slots_per_epoch": 32},
+        "current_slot": 100,
+        "last_poll_ts": 1_700_000_000,
+        "validators": {
+            "42": {
+                "pubkey": "0xabc",
+                "label": "v1",
+                "last_status": "active_ongoing",
+                "last_balance_gwei": 32_000_000_000,
+                "liveness": [[10, 1], [11, 1]],
+            }
+        },
+    }))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(state_file))
+
+    poll_called = {"v": False}
+    save_called = {"v": False}
+    monkeypatch.setattr(cli_mod, "poll", lambda cfg, s: poll_called.__setitem__("v", True) or [])
+    monkeypatch.setattr(cli_mod, "save_state", lambda p, s: save_called.__setitem__("v", True))
+
+    class _Cfg:
+        validators = []
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+
+    import argparse
+    args = argparse.Namespace(refresh=False)
+    rc = cli_mod.cmd_status(args)
+    assert rc == 0
+    assert poll_called["v"] is False, "status should not poll by default"
+    assert save_called["v"] is False, "status should not write state by default"
+
+
+def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
+    """`evs status --refresh` opts back into the old behavior."""
+    import json
+
+    from eth_validator_stats import cli as cli_mod
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({"chain_info": None, "validators": {}}))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(state_file))
+
+    poll_called = {"v": False}
+    save_called = {"v": False}
+    monkeypatch.setattr(cli_mod, "poll", lambda cfg, s: poll_called.__setitem__("v", True) or [])
+    monkeypatch.setattr(cli_mod, "save_state", lambda p, s: save_called.__setitem__("v", True))
+
+    class _Cfg:
+        validators = []
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+
+    import argparse
+    args = argparse.Namespace(refresh=True)
+    rc = cli_mod.cmd_status(args)
+    assert rc == 0
+    assert poll_called["v"] is True
+    assert save_called["v"] is True
+
+
+def test_cmd_status_prints_staleness_footer(monkeypatch, tmp_path, capsys):
+    """When state has a last_poll_ts, status prints a 'last updated' line
+    so the user can spot a dead watcher."""
+    import json
+    import time as _time
+
+    from eth_validator_stats import cli as cli_mod
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({
+        "chain_info": None,
+        "current_slot": 0,
+        "last_poll_ts": 1_700_000_000,
+        "validators": {},
+    }))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(state_file))
+    # Freeze "now" 125 seconds after the last poll.
+    monkeypatch.setattr(_time, "time", lambda: 1_700_000_125.0)
+
+    class _Cfg:
+        validators = []
+
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+
+    import argparse
+    rc = cli_mod.cmd_status(argparse.Namespace(refresh=False))
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "last updated" in out.lower()
+    # 125 seconds ago should render as "2m" or "2 min" — accept either.
+    assert "2m" in out or "2 min" in out
+
+
+def test_cmd_status_prints_hint_when_state_is_empty(monkeypatch, tmp_path, capsys):
+    """First-run case: state file missing or empty. Don't show an empty
+    table with no explanation — guide the user toward `check` or watch."""
+    from eth_validator_stats import cli as cli_mod
+
+    # No state file at all on disk.
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(tmp_path / "missing.json"))
+
+    class _Cfg:
+        validators = []
+
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+
+    import argparse
+    rc = cli_mod.cmd_status(argparse.Namespace(refresh=False))
+    out = capsys.readouterr().out
+    assert rc == 0
+    # Hint should mention the way out: check, watch, or --refresh.
+    assert "evs check" in out or "--refresh" in out or "watch" in out.lower()
+
+
+def test_main_returns_int_on_unknown_command():
+    """The Typer wrapper must translate Click's UsageError exit code to an int,
+    not raise SystemExit. Existing test infra relies on `rc = main([...])`."""
+    from eth_validator_stats.cli import main
+    rc = main(["nonexistent-command"])
+    assert isinstance(rc, int)
+    assert rc == 2
+
+
+def test_main_help_lists_all_top_level_commands(capsys):
+    """`evs --help` succeeds and the captured output mentions every top-level
+    command. Doesn't pin exact wording — Rich-styled output can drift."""
+    from eth_validator_stats.cli import main
+    rc = main(["--help"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    for command in (
+        "status", "check", "watch", "info", "init",
+        "install-service", "uninstall-service", "simulate", "validators",
+    ):
+        assert command in out, f"--help output missing {command!r}"
+
+
+def test_init_rejects_host_and_beacon_url_together():
+    """Mutex check: argparse used add_mutually_exclusive_group; Typer uses a
+    runtime check. The exit code (2) and non-raising behavior must match."""
+    from eth_validator_stats.cli import main
+    rc = main(["init", "--host", "x", "--beacon-url", "http://y"])
+    assert rc == 2
+
+
+def test_init_rejects_ntfy_topic_and_no_ntfy_together():
+    """Same mutex shape for the ntfy pair."""
+    from eth_validator_stats.cli import main
+    rc = main(["init", "--ntfy-topic", "alerts", "--no-ntfy"])
+    assert rc == 2
+
+
+def test_main_returns_int_on_help_exit():
+    """Help is implemented via Click's Exit(0). The wrapper must translate."""
+    from eth_validator_stats.cli import main
+    rc = main(["status", "--help"])
+    assert isinstance(rc, int)
+    assert rc == 0
+
+
+def test_main_returns_int_when_init_system_used_without_root(monkeypatch):
+    """`init --system` as non-root must return 1 from main(), not raise SystemExit.
+    Regresses a real leak where cmd_init's raise SystemExit(1) bypassed the wrapper."""
+    from eth_validator_stats.cli import main
+
+    # Force the non-root path. `cmd_init` uses os.geteuid() != 0.
+    monkeypatch.setattr("os.geteuid", lambda: 1000)
+
+    # Disable any auto-promotion logic so we hit the --system-without-root branch.
+    rc = main(["init", "--system", "--no-ntfy", "--yes"])
+    assert isinstance(rc, int)
+    assert rc != 0
+
+
+def test_main_returns_nonzero_when_validators_subcommand_fails(monkeypatch):
+    """Sub-Typer command exit codes must propagate to main()'s int return.
+    Without this, `evs validators add bad-pubkey` returned 0 to the shell
+    even when the underlying handler returned 1."""
+    from eth_validator_stats.cli import main
+
+    # Mock the lazy-imported handler so we don't hit the beacon node.
+    import eth_validator_stats._validators_cmd as vmod
+    monkeypatch.setattr(vmod, "cmd_validators_add", lambda args: 1)
+
+    rc = main(["validators", "add", "0x" + "a" * 96, "--no-verify"])
+    assert isinstance(rc, int)
+    assert rc == 1

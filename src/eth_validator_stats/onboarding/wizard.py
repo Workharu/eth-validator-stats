@@ -98,12 +98,27 @@ def run_wizard(
     # Step 4 — ntfy
     ntfy_topic = _step_ntfy(args, io, notifier_factory, topic_generator)
 
+    # Step 4b — Daily heartbeat. Asked only when ntfy is configured, since
+    # the heartbeat IS a ntfy push. Default Yes — operators almost always
+    # want a "your monitor is still alive" ping. The point is the *absence*
+    # of the push: if it stops arriving, you investigate.
+    daily_heartbeat = False
+    if ntfy_topic and not args.yes:
+        daily_heartbeat = confirm(
+            io,
+            'Send a daily "MONITOR ALIVE" push at 9 AM so you know the monitor is up?',
+            default=True,
+        )
+    elif ntfy_topic and args.yes:
+        # Non-interactive flow: opt in by default when ntfy is set.
+        daily_heartbeat = True
+
     # Step 5 — Write
     cfg = AppConfig(
         beacon_node_url=beacon_url,
         validators=[entry],
         beacon_auth_token=auth_token,
-        alerts=AlertsConfig(ntfy_topic=ntfy_topic),
+        alerts=AlertsConfig(ntfy_topic=ntfy_topic, daily_heartbeat=daily_heartbeat),
     )
     # Apply mode/uid/gid atomically on the tmp file before rename — see
     # config_io.write_config's docstring for why this matters on system

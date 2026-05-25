@@ -27,6 +27,7 @@ def test_wizard_happy_path_writes_expected_yaml(
         "",                       # enable ntfy (Y default)
         "",                       # accept generated topic
         "",                       # accept arrival confirmation
+        "",                       # daily heartbeat (Y default)
     ])
     portscan = FakePortscanResult(found=[
         Found(url="http://192.0.2.10:3500", port=3500, client_version="Prysm/v7", latency_ms=12),

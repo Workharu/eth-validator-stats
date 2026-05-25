@@ -789,3 +789,158 @@ def test_lifecycle_same_status_no_fire():
     notif = FakeNotifier()
     fired = process_lifecycle_alerts(state, {42}, notif)
     assert fired == []
+
+
+# --- daily heartbeat --------------------------------------------------------
+
+def _hb_cfg(*, daily=True, hour=9, url=""):
+    return AlertsConfig(
+        ntfy_topic="https://ntfy.example/t",
+        daily_heartbeat=daily,
+        daily_heartbeat_hour=hour,
+        heartbeat_url=url,
+    )
+
+
+def test_daily_heartbeat_fires_at_configured_hour():
+    """First time we hit 9 AM with daily_heartbeat=True, send the push."""
+    from datetime import datetime
+
+    from eth_validator_stats.alerts import send_daily_heartbeat
+    state: dict = {}
+    notif = FakeNotifier()
+
+    sent = send_daily_heartbeat(
+        state, notif, _hb_cfg(hour=9),
+        rows_summary="2 validators tracked, 2 active_ongoing",
+        now_local=datetime(2026, 5, 26, 9, 0, 0),
+    )
+
+    assert sent is True
+    assert len(notif.sent) == 1
+    assert notif.sent[0][0] == "MONITOR ALIVE"
+    assert "2 validators tracked" in notif.sent[0][1]
+    assert state["last_daily_heartbeat_date"] == "2026-05-26"
+
+
+def test_daily_heartbeat_skips_before_configured_hour():
+    """At 8 AM with heartbeat_hour=9, don't send yet — the operator hasn't
+    finished their morning coffee."""
+    from datetime import datetime
+
+    from eth_validator_stats.alerts import send_daily_heartbeat
+    state: dict = {}
+    notif = FakeNotifier()
+    sent = send_daily_heartbeat(
+        state, notif, _hb_cfg(hour=9),
+        rows_summary="x",
+        now_local=datetime(2026, 5, 26, 8, 59, 0),
+    )
+    assert sent is False
+    assert notif.sent == []
+    assert "last_daily_heartbeat_date" not in state
+
+
+def test_daily_heartbeat_dedups_within_same_day():
+    """Second call on the same day must not re-fire."""
+    from datetime import datetime
+
+    from eth_validator_stats.alerts import send_daily_heartbeat
+    state: dict = {}
+    notif = FakeNotifier()
+    send_daily_heartbeat(
+        state, notif, _hb_cfg(hour=9), rows_summary="x",
+        now_local=datetime(2026, 5, 26, 9, 0, 0),
+    )
+    sent_again = send_daily_heartbeat(
+        state, notif, _hb_cfg(hour=9), rows_summary="x",
+        now_local=datetime(2026, 5, 26, 23, 59, 0),  # later same day
+    )
+    assert sent_again is False
+    assert len(notif.sent) == 1
+
+
+def test_daily_heartbeat_fires_again_on_next_day():
+    """After midnight, the YYYY-MM-DD key changes; next call should fire."""
+    from datetime import datetime
+
+    from eth_validator_stats.alerts import send_daily_heartbeat
+    state: dict = {}
+    notif = FakeNotifier()
+    send_daily_heartbeat(
+        state, notif, _hb_cfg(hour=9), rows_summary="x",
+        now_local=datetime(2026, 5, 26, 9, 0, 0),
+    )
+    sent_next = send_daily_heartbeat(
+        state, notif, _hb_cfg(hour=9), rows_summary="x",
+        now_local=datetime(2026, 5, 27, 9, 0, 0),
+    )
+    assert sent_next is True
+    assert len(notif.sent) == 2
+    assert state["last_daily_heartbeat_date"] == "2026-05-27"
+
+
+def test_daily_heartbeat_disabled_never_fires():
+    from datetime import datetime
+
+    from eth_validator_stats.alerts import send_daily_heartbeat
+    state: dict = {}
+    notif = FakeNotifier()
+    sent = send_daily_heartbeat(
+        state, notif, _hb_cfg(daily=False, hour=9), rows_summary="x",
+        now_local=datetime(2026, 5, 26, 9, 0, 0),
+    )
+    assert sent is False
+    assert notif.sent == []
+
+
+# --- heartbeat URL ---------------------------------------------------------
+
+def test_post_heartbeat_url_sends_post_when_configured():
+    from eth_validator_stats.alerts import post_heartbeat_url
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["url"] = str(request.url)
+        return httpx.Response(200, text="ok")
+
+    cfg = _hb_cfg(url="https://hc-ping.com/abc-123")
+    post_heartbeat_url(cfg, transport=httpx.MockTransport(handler))
+
+    assert seen["method"] == "POST"
+    assert seen["url"] == "https://hc-ping.com/abc-123"
+
+
+def test_post_heartbeat_url_noop_when_empty():
+    from eth_validator_stats.alerts import post_heartbeat_url
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200)
+
+    cfg = _hb_cfg(url="")  # empty = disabled
+    post_heartbeat_url(cfg, transport=httpx.MockTransport(handler))
+    assert calls == []
+
+
+def test_post_heartbeat_url_swallows_errors(caplog):
+    """A failing heartbeat URL must NOT crash the watch loop. Log warning,
+    move on. Otherwise a broken watchdog provider could take down our
+    monitoring."""
+    import logging
+
+    from eth_validator_stats.alerts import post_heartbeat_url
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("simulated network down")
+
+    cfg = _hb_cfg(url="https://broken.example/ping")
+    with caplog.at_level(logging.WARNING, logger="eth_validator_stats.alerts"):
+        post_heartbeat_url(cfg, transport=httpx.MockTransport(handler))
+
+    assert any(
+        "heartbeat POST" in rec.message and "broken.example" in rec.message
+        for rec in caplog.records
+    )
