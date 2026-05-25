@@ -1,3 +1,51 @@
+eth-validator-stats (0.4.0-1) unstable; urgency=medium
+
+  * Breaking: legacy TOML config support removed. The CLI now reads
+    YAML only (.yml / .yaml). The --migrate flag and the interactive
+    "found legacy TOML" prompt are gone. If you somehow still have
+    a config.toml lying around, convert it to YAML by hand before
+    upgrading — every release since 0.2.0 has shipped YAML as the
+    canonical format, so this should affect no real-world installs.
+  * Reliability: `save_state` no longer races between an interactive
+    `status` run and the `watch` loop. Both writers now use unique
+    tmp files via tempfile.mkstemp instead of a fixed .json.tmp path,
+    so concurrent saves can't clobber each other.
+  * UX: `init` no longer prints an empty "[]" bracket on prompts whose
+    default is the empty string (the "Enter is OK" sentinel).
+  * Project hygiene: adopt ruff (lint job runs in CI), add pytest-cov
+    (88% baseline), expand the CI test matrix to Python 3.11/3.12/3.13,
+    add Python 3.13 classifier to pyproject. Pin a minimum
+    `permissions: contents: read` on the pre-release-check workflow
+    so the GITHUB_TOKEN is least-privilege regardless of repo defaults.
+  * Docs: add CHANGELOG.md (Keep a Changelog format), SECURITY.md,
+    CONTRIBUTING.md, issue + PR templates, and a dependabot.yml that
+    groups runtime vs dev updates weekly.
+  * Installer: scripts/install.sh documents the trust model and uses
+    `jq` when present, falling back to the grep parser on minimal hosts.
+  * Fix: spurious MISSED_ATTESTATIONS alerts on freshly-deposited
+    validators. Pending validators (pending_initialized,
+    pending_queued) correctly skipped the OFFLINE check but then
+    fell through to the missed-attestation check below. Restructured
+    around the actual Beacon API lifecycle — pending_* are now
+    hard-no-alert, active_ongoing is the only state subject to
+    missed-attestation checks, and active_exiting / active_slashed
+    surface as OFFLINE so slow exits aren't silent.
+  * New: validator lifecycle notifications. Each stage transition on
+    the Beacon API status enum fires its own ntfy push, deduplicated
+    per-validator per-transition:
+      - ACTIVATED (pending_* -> active_ongoing)
+      - EXIT INITIATED (active_ongoing -> active_exiting)
+      - SLASHED (anything -> active_slashed / exited_slashed) with
+        ntfy Priority: urgent so it bypasses Do-Not-Disturb
+      - EXITED (active_exiting -> exited_unslashed)
+      - WITHDRAWAL READY (exited -> withdrawal_possible)
+    All five available via `simulate <event>`: activated,
+    exit-initiated, slashed, exited, withdrawal-ready. Notifier.send
+    now accepts an optional priority= keyword that maps to ntfy's
+    Priority HTTP header.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 18:18:12 +0000
+
 eth-validator-stats (0.3.12-1) unstable; urgency=medium
 
   * New: `eth-validator-stats validators add|list|rm` subcommand group.

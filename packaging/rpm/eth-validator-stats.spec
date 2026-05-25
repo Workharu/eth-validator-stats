@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.12
+Version:        0.4.0
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -230,6 +230,36 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.4.0-1
+- Breaking: legacy TOML config support removed. The CLI now reads
+  YAML only (.yml / .yaml). The --migrate flag is gone. Every
+  release since 0.2.0 has shipped YAML as the canonical format,
+  so this should affect no real-world installs.
+- Reliability: save_state no longer races between an interactive
+  `status` and the `watch` loop. Both writers now use unique tmp
+  files instead of a fixed .json.tmp path.
+- UX: `init` no longer prints an empty "[]" bracket on prompts
+  whose default is the empty string.
+- Project hygiene: adopt ruff (lint CI job), add pytest-cov, expand
+  the CI test matrix to Python 3.11/3.12/3.13, add the 3.13 trove
+  classifier. Pin least-privilege permissions on the pre-release
+  workflow's GITHUB_TOKEN.
+- Docs: add CHANGELOG.md, SECURITY.md, CONTRIBUTING.md, issue+PR
+  templates, and a dependabot.yml that groups runtime vs dev deps.
+- Installer: scripts/install.sh documents the trust model and uses
+  jq when present, falling back to grep on minimal hosts.
+- Fix: spurious MISSED_ATTESTATIONS alerts on freshly-deposited
+  validators. pending_initialized and pending_queued are now
+  hard-no-alert; active_ongoing is the only state subject to
+  missed-attestation checks; active_exiting / active_slashed
+  surface as OFFLINE so slow exits aren't silent.
+- New: validator lifecycle notifications. Each stage transition on
+  the Beacon API status enum fires its own ntfy push, deduplicated
+  per-validator per-transition: ACTIVATED, EXIT INITIATED, SLASHED
+  (ntfy Priority: urgent), EXITED, WITHDRAWAL READY. All five
+  available via `simulate <event>`: activated, exit-initiated,
+  slashed, exited, withdrawal-ready.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.12-1
 - New: `eth-validator-stats validators add|list|rm` subcommand group.
   Adds, lists, and removes validators from config.yml without

@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 For the Debian-format release notes (used by the `.deb` package), see
 [`packaging/deb/debian/changelog`](packaging/deb/debian/changelog).
 
+## [0.4.0] - 2026-05-25
+### Removed
+- **Breaking:** legacy TOML config support. The CLI now reads YAML only (`.yml` / `.yaml`). The `--migrate` flag, the interactive "found legacy TOML" prompt on `init`, the `legacy_toml_path` helper, and the `tomllib` import are all gone. Every release since 0.2.0 has shipped YAML as the canonical format, so this should affect no real-world installs. Anything with a `.toml` suffix is now rejected with `unsupported config suffix`.
+
+### Added
+- **Validator lifecycle notifications.** Each stage transition on the Beacon API status enum now fires its own ntfy push, deduplicated per-validator per-transition:
+  - `ACTIVATED` — `pending_*` → `active_ongoing`. Celebrates the activation queue clearing.
+  - `EXIT INITIATED` — `active_ongoing` → `active_exiting`. Confirms a voluntary exit landed.
+  - `SLASHED` — anything → `active_slashed` or `exited_slashed`. Sent with ntfy `Priority: urgent` so it bypasses Do-Not-Disturb on most phones.
+  - `EXITED` — `active_exiting` → `exited_unslashed`. Clean exit complete.
+  - `WITHDRAWAL READY` — exited → `withdrawal_possible`. Funds claimable.
+  - All five available via `simulate <event>` (`activated`, `exit-initiated`, `slashed`, `exited`, `withdrawal-ready`) so you can verify push delivery and DND bypass without waiting for a real transition.
+- `Notifier.send()` now accepts an optional `priority` keyword that maps to ntfy's [`Priority:` HTTP header](https://docs.ntfy.sh/publish/#message-priority).
+- `CHANGELOG.md` (Keep a Changelog 1.1.0), `SECURITY.md`, `CONTRIBUTING.md`, GitHub issue and PR templates, and `.github/dependabot.yml` (weekly, grouped runtime vs dev).
+- `ruff` (E/F/I/UP/B/W) and `pytest-cov` as dev dependencies, plus a new `lint` job in `pre-release-check.yml`. Baseline coverage on `main`: 88%.
+- CI test matrix expanded to Python 3.11, 3.12, and 3.13. Matching trove classifier added to `pyproject.toml`.
+- `scripts/install.sh` now uses `jq` when present, falling back to the existing grep parser on minimal hosts.
+
+### Changed
+- `save_state` now uses `tempfile.mkstemp` for a unique tmp filename instead of a fixed `<name>.json.tmp`. An interactive `status` running alongside the `watch` loop could previously clobber each other's tmp file; with unique names, concurrent writers are safe.
+- `prompt()` in the init wizard no longer prints an empty `[]` bracket when the default is the empty-string sentinel (used for "Enter is OK, nothing to display").
+- `_resolve_existing_config()` returns a plain `Path` (was `tuple[Path, bool]`). The `is_legacy` boolean from the old return type disappeared along with TOML support.
+- `pre-release-check.yml` pins `permissions: contents: read` at the workflow root so the `GITHUB_TOKEN` is least-privilege regardless of repo or org defaults. `release.yml` already had explicit permissions everywhere.
+- `packaging/linux/README.md` rewritten to drop the obsolete "Phase 1 / Phase 2" framing — that directory is now framed as the "install from a git checkout" path with a migration note for users who want to switch to the distro package.
+- `scripts/install.sh` documents its trust model (downloads release artifacts directly from `github.com/Workharu/eth-validator-stats` over HTTPS, no third-party mirror, no bundled key).
+
+### Fixed
+- **Spurious missed-attestation alerts on freshly-deposited validators.** `evaluate_alerts` correctly skipped the OFFLINE check for `pending_*` validators but then fell through to the missed-attestations check below — so if the beacon node's liveness endpoint happened to return a pending validator (Lighthouse and Prysm differ on this), zeros accumulated and a spurious `MISSED_ATTESTATIONS` alert would fire for a validator that has no committee assignment yet. Restructured around the actual Beacon API lifecycle: `pending_initialized` and `pending_queued` are now hard-no-alert (not validating yet); `active_ongoing` is the only state subject to missed-attestation checks; `active_exiting` / `active_slashed` / `exited_*` / `withdrawal_*` now correctly surface as OFFLINE so slow exits aren't silent.
+- Pre-existing `B904` lint findings: `raise SystemExit(...)` inside `except` clauses now uses `raise ... from e` or `raise ... from None`, so the underlying cause stays in the traceback chain (or is explicitly suppressed) instead of looking like a bug inside the exception handler.
+
 ## [0.3.12] - 2026-05-25
 ### Added
 - `eth-validator-stats validators add|list|rm` subcommand group: edit the configured validator list without hand-editing YAML. `add` verifies the validator exists on the beacon node (skip with `--no-verify`); `list --status` shows live state and balance; `rm` accepts an index, pubkey, or label and prompts unless `--yes` is passed. All three preserve file mode and ownership and trigger a systemd restart.
@@ -111,6 +141,7 @@ For the Debian-format release notes (used by the `.deb` package), see
 - Bundled `python3.11` venv at `/opt/eth-validator-stats/venv`.
 - `eth-validator-stats init --system` flag for system-service onboarding.
 
+[0.4.0]: https://github.com/Workharu/eth-validator-stats/releases/tag/v0.4.0
 [0.3.12]: https://github.com/Workharu/eth-validator-stats/releases/tag/v0.3.12
 [0.3.11]: https://github.com/Workharu/eth-validator-stats/releases/tag/v0.3.11
 [0.3.10]: https://github.com/Workharu/eth-validator-stats/releases/tag/v0.3.10
