@@ -105,13 +105,13 @@ def run_wizard(
 
     io.write(f"\n✓ Wrote {cfg_path}\n")
     io.write(
-        "\nTo add more validators, edit the file and append entries under `validators:`.\n"
-        "  validators:\n"
-        '    - pubkey: "0x..."\n'
-        '      label: "home-2"\n'
-        "    - index: 12346\n"
-        '      label: "home-3"\n\n'
-        "Next:\n"
+        "\nAdd more validators (verified against the beacon node):\n"
+        "  eth-validator-stats validators add <pubkey-or-index> --label home-2\n"
+        "  eth-validator-stats validators list\n"
+        "\nOr the 3-character alias:\n"
+        "  evs validators add 12346 --label home-3\n"
+        "  evs status\n"
+        "\nNext, try:\n"
         "  eth-validator-stats status\n"
         "  eth-validator-stats check --missed 3\n"
     )
@@ -178,8 +178,19 @@ def _step_auth(args: WizardArgs, io: IOLike) -> str:
     needs = confirm(io, "Does this node need a Bearer auth token?", default=False)
     if not needs:
         return ""
-    raw = prompt(io, "Bearer token (will be stored in config)", default="")
-    return raw
+    # User said yes — they want auth. Insist on a non-empty token, since
+    # an empty token is the same as having said no and silently
+    # accepting it would be confusing.
+    while True:
+        raw = prompt(io, "Bearer token (will be stored in config)", default="").strip()
+        if raw:
+            return raw
+        io.write(
+            "  empty token; if you don't actually need auth, answer 'n' to the previous question.\n"
+        )
+        if not confirm(io, "Save without an auth token (equivalent to answering 'no')?", default=False):
+            continue
+        return ""
 
 
 def _step_validator(
