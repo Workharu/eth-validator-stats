@@ -9,6 +9,13 @@ case "$1" in
         if getent passwd eth-validator-stats >/dev/null; then
             deluser --system --quiet eth-validator-stats || true
         fi
+        # deluser --system does not remove the same-named system group, so
+        # do that explicitly. Without this, a subsequent re-install skips
+        # the addgroup step in postinst (since the group already exists),
+        # which makes "purge then reinstall" not a true first-install test.
+        if getent group eth-validator-stats >/dev/null; then
+            delgroup --system --quiet eth-validator-stats || true
+        fi
         ;;
 esac
 

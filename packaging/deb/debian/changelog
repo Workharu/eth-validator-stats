@@ -11,6 +11,10 @@ eth-validator-stats (0.3.3-1) unstable; urgency=medium
     directory` warning during first install. Reordered the steps so
     the config and state directories are created before adduser
     references the service user's home.
+  * Fix: postrm now removes the eth-validator-stats system group on
+    purge (Debian's `deluser --system` only removes the user, not the
+    same-named group). Without this, `apt purge && apt install` was
+    not a true first-install test.
   * New: short CLI alias `evs` (3 chars). Same binary as
     `eth-validator-stats`, just easier to type.
   * Docs: substantial README polish for onboarding — pick-your-install

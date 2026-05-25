@@ -203,7 +203,8 @@ fi
   /var/lib/eth-validator-stats can't be accessed: No such file or
   directory" warning during first install. Reordered the steps so
   config and state directories are created before adduser references
-  the service user's home.
+  the service user's home. postrm also now removes the system group
+  on purge so `apt purge && apt install` is a true first-install test.
 - New: short CLI alias `evs` (3 chars). Same binary as
   eth-validator-stats, just easier to type.
 - Docs: substantial README polish for onboarding (pick-your-install
