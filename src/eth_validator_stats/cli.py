@@ -577,10 +577,30 @@ def configure_logging(level_name: str | None) -> None:
     logging.getLogger().setLevel(level)
 
 
+def _get_version() -> str:
+    """Read the installed package version from its dist metadata.
+
+    Returns 'unknown' as a defensive fallback in the unlikely case the
+    package metadata is missing (e.g. running directly from a checkout
+    without an editable install).
+    """
+    try:
+        from importlib.metadata import version as _v
+        return _v("eth-validator-stats")
+    except Exception:
+        return "unknown"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="eth-validator-stats",
         description="Tiny self-hosted CLI for Ethereum validator stats.",
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"%(prog)s {_get_version()}",
+        help="Print the installed package version and exit.",
     )
     parser.add_argument(
         "--log-level",

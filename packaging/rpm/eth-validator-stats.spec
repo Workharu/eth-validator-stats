@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.4
+Version:        0.3.5
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -196,6 +196,24 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.5-1
+- New: `eth-validator-stats --version` (and `evs --version`) prints
+  the installed package version. Reads from importlib.metadata so it
+  reflects the actual installed dist regardless of install method.
+- New: `eth-validator-stats init --system` now starts the systemd
+  service automatically after writing /etc/<pkg>/config.yml. First-
+  time setup after `dnf install` is now a single command instead of
+  two. Helper is best-effort and non-fatal: silently skips when
+  systemctl is unavailable, when the eth-validator-stats.service
+  unit isn't installed (e.g. pipx-only), or when start fails (in
+  which case it prints a clear pointer at `systemctl start`).
+- Internal: uses `systemctl restart` (not `start`) so re-running
+  `init --system --force` after a config edit picks up the new
+  config without a separate restart step.
+- Docs: %post first-install message simplified to a single
+  "Next step: sudo eth-validator-stats init --system". Same for the
+  .deb postinst message and the four README install sections.
+
 * Sun May 24 2026 privatejava <privatejava@yahoo.com> - 0.3.4-1
 - Fix: status / check / info / simulate now find /etc/<pkg>/config.yml
   written by `init --system` or the .rpm post-install. Previously they

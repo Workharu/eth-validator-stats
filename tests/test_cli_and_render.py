@@ -164,3 +164,18 @@ def test_configure_logging_explicit_arg_wins_over_env(monkeypatch):
     monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "DEBUG")
     configure_logging("ERROR")
     assert logging.getLogger().level == logging.ERROR
+
+
+def test_version_flag_prints_version_and_exits_zero(capsys):
+    """`eth-validator-stats --version` prints `<prog> <semver>` and exits 0."""
+    import re
+    import pytest
+    from eth_validator_stats.cli import main
+
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    out = capsys.readouterr().out
+    assert out.startswith("eth-validator-stats ")
+    # Version may be a semver like "0.3.5" or the "unknown" fallback.
+    assert re.search(r"(\d+\.\d+\.\d+|unknown)", out)
