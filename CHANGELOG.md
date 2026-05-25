@@ -20,6 +20,7 @@ For the Debian-format release notes (used by the `.deb` package), see
 - **State file is now auto-shared across callers when a system install is present.** `evs status` (as your user), `sudo evs status`, and the `watch` service all now read/write `/var/lib/eth-validator-stats/state.json` when that directory exists. Previously each user kept its own copy under `~/.local/share/eth-validator-stats/`, so the three views diverged. Falls back to the per-user platformdirs path on pipx/`--user` installs.
 - **`evs status` now shows a "last updated: 2m ago" footer** so a dead `watch` service is obvious at a glance. Coarse-grained (s/m/h/d ago) — operators want "is it alive?", not exact seconds.
 - **First-run `evs status` (no state yet) prints an onboarding hint** listing three ways to populate state (start the watcher, run `evs check` once, or `evs status --refresh`), instead of an empty table.
+- CLI internals migrated from `argparse` to [`typer`](https://typer.tiangolo.com/). All command names, flags, and exit codes preserved; help output is now Rich-styled (colored panels). `--log-level` is now case-insensitive but still rejects invalid values.
 
 ## [0.4.0] - 2026-05-25
 ### Removed
