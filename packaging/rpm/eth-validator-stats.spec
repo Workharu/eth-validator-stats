@@ -93,7 +93,7 @@ done
 PBS_PYTHON=$(find %{buildroot}/opt/%{name}/python -type f -name python3.11 | head -n1)
 test -n "$PBS_PYTHON" || { echo "ERROR: no python3.11 found after uv install"; exit 1; }
 $PBS_PYTHON -m venv --copies %{buildroot}/opt/%{name}/venv
-%{buildroot}/opt/%{name}/venv/bin/pip install --no-cache-dir .
+%{buildroot}/opt/%{name}/venv/bin/pip install --no-cache-dir --no-deps .
 
 # Drop activation scripts: not needed at runtime (the service ExecStart calls
 # the venv binary directly) and they embed the buildroot path in VIRTUAL_ENV=...
