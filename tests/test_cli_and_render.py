@@ -234,10 +234,11 @@ def test_poll_records_last_poll_ts(monkeypatch):
             from eth_validator_stats.beacon import ChainInfo
             return ChainInfo(genesis_time=0, seconds_per_slot=12, slots_per_epoch=32)
         def get_head(self):
-            class H: slot = 100
-            return H()
+            from eth_validator_stats.beacon import Head
+            return Head(slot=100)
         def get_validators(self, ids): return []
         def get_liveness(self, epoch, indices): return {}
+        def get_proposer_duties(self, epoch): return []
 
     monkeypatch.setattr("eth_validator_stats.cli.BeaconClient", lambda *a, **kw: _StubClient())
 
