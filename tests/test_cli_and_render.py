@@ -432,10 +432,9 @@ def test_main_returns_nonzero_when_validators_subcommand_fails(monkeypatch):
     """Sub-Typer command exit codes must propagate to main()'s int return.
     Without this, `evs validators add bad-pubkey` returned 0 to the shell
     even when the underlying handler returned 1."""
-    from eth_validator_stats.cli import main
-
     # Mock the lazy-imported handler so we don't hit the beacon node.
     import eth_validator_stats._validators_cmd as vmod
+    from eth_validator_stats.cli import main
     monkeypatch.setattr(vmod, "cmd_validators_add", lambda args: 1)
 
     rc = main(["validators", "add", "0x" + "a" * 96, "--no-verify"])
