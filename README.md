@@ -75,7 +75,7 @@ Works on Debian 12+ and Ubuntu 22.04+ (also 24.04, no deadsnakes PPA needed — 
 #    Files: eth-validator-stats_<version>-1_amd64.deb (or _arm64.deb)
 
 # 2. Install with apt so dependencies (e.g. adduser) auto-resolve.
-sudo apt install -y ./eth-validator-stats_0.3.12-1_amd64.deb
+sudo apt install -y ./eth-validator-stats_0.4.0-1_amd64.deb
 
 # 3. Set up config + start the service.
 sudo eth-validator-stats init --system           # writes config AND starts the service
@@ -110,7 +110,7 @@ sudo apt purge eth-validator-stats            # also wipes config + state + user
 #    Files: eth-validator-stats-<version>-1.fcXX.x86_64.rpm (or .aarch64.rpm)
 
 # 2. Install.
-sudo dnf install ./eth-validator-stats-0.3.12-1.fc40.x86_64.rpm
+sudo dnf install ./eth-validator-stats-0.4.0-1.fc40.x86_64.rpm
 
 # 3. Set up config + start the service.
 sudo eth-validator-stats init --system           # writes config AND starts the service
@@ -211,7 +211,16 @@ If you'd rather skip the wizard entirely, copy `config.yml.example` to `~/.confi
 eth-validator-stats simulate missed-attestation
 ```
 
-Your phone should buzz with `MISSED_ATTESTATIONS last=2`. Use this any time you change `ntfy_topic` or want to confirm the alert path before trusting it. Other simulatable events: `offline`, `withdrawal`, `proposing-soon`, `proposed`, `missed-proposal`, `blind`, `recovered`.
+Your phone should buzz with `MISSED_ATTESTATIONS last=2`. Use this any time you change `ntfy_topic` or want to confirm the alert path before trusting it.
+
+Other simulatable events:
+
+- Attestation / liveness: `missed-attestation`, `offline`, `withdrawal`
+- Proposals: `proposing-soon`, `proposed`, `missed-proposal`
+- Monitor health: `blind`, `recovered`
+- Lifecycle transitions: `activated`, `exit-initiated`, `slashed`, `exited`, `withdrawal-ready`
+
+`slashed` is sent with `Priority: urgent` so you can verify your phone's Do-Not-Disturb bypass works the way you expect — that's the one alert you don't want to miss.
 
 ## Usage
 

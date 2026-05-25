@@ -36,11 +36,11 @@ class AlertsConfig:
 
 
 class Notifier(Protocol):
-    def send(self, title: str, body: str) -> None: ...
+    def send(self, title: str, body: str, *, priority: str | None = None) -> None: ...
 
 
 class NullNotifier:
-    def send(self, title: str, body: str) -> None:  # noqa: ARG002
+    def send(self, title: str, body: str, *, priority: str | None = None) -> None:  # noqa: ARG002
         return
 
 
@@ -60,12 +60,17 @@ class NtfyNotifier:
         self._raise_on_error = raise_on_error
         self.icon_url = icon_url
 
-    def send(self, title: str, body: str) -> None:
+    def send(self, title: str, body: str, *, priority: str | None = None) -> None:
         if not self.topic_url:
             return
         headers = {"Title": title}
         if self.icon_url:
             headers["Icon"] = self.icon_url
+        if priority:
+            # ntfy accepts {min, low, default, high, urgent} or 1–5 — see
+            # https://docs.ntfy.sh/publish/#message-priority. SLASHED uses
+            # "urgent" so the push bypasses Do-Not-Disturb on most phones.
+            headers["Priority"] = priority
         try:
             with httpx.Client(timeout=self.timeout, transport=self._transport) as c:
                 r = c.post(
@@ -91,6 +96,101 @@ def make_notifier(cfg: AlertsConfig) -> Notifier:
 
 
 BLIND_KEY = "blind_alerted_until_ts"
+
+
+# Status families per the Beacon API validator status enum:
+# https://ethereum.github.io/beacon-APIs/ (look for ValidatorStatus)
+_PENDING_STATUSES = frozenset({"pending_initialized", "pending_queued"})
+_SLASHED_STATUSES = frozenset({"active_slashed", "exited_slashed"})
+_EXITED_STATUSES = frozenset({"exited_unslashed", "exited_slashed"})
+_WITHDRAWAL_READY_STATUSES = frozenset({"withdrawal_possible"})
+
+
+def process_lifecycle_alerts(
+    state: dict,
+    configured_indices: set[int],
+    notifier: Notifier,
+) -> list[tuple[int, str, str]]:
+    """Fire one-shot notifications when a validator transitions between
+    lifecycle stages on the Beacon API status enum.
+
+    Transitions covered (previous_status -> last_status):
+      pending_*           -> active_ongoing       => ACTIVATED
+      active_ongoing      -> active_exiting       => EXIT INITIATED
+      anything            -> active_slashed       => SLASHED (urgent)
+      anything            -> exited_slashed       => SLASHED (urgent, post-eject)
+      active_exiting      -> exited_unslashed     => EXITED
+      exited_unslashed    -> withdrawal_possible  => WITHDRAWAL READY
+
+    Dedup is by (index, transition-key). Each transition fires at most
+    once per validator per state-file lifetime — we record the firing
+    in `lifecycle_alerts_fired` on the validator's record. The same
+    transition cannot fire twice because once it lands in the new
+    status, `previous_status` no longer matches the trigger source.
+
+    Returns the list of (index, label, transition_name) for tests /
+    structured logging. The actual ntfy push has already been sent.
+    """
+    fired: list[tuple[int, str, str]] = []
+    vstate = state.get("validators", {})
+    for idx_str, record in vstate.items():
+        try:
+            idx = int(idx_str)
+        except ValueError:
+            continue
+        if idx not in configured_indices:
+            continue
+
+        prev = record.get("previous_status") or ""
+        curr = record.get("last_status") or ""
+        if not curr or prev == curr:
+            continue
+
+        label = record.get("label", "")
+        history = record.setdefault("lifecycle_alerts_fired", [])
+        label_part = f" {label}" if label else ""
+
+        # Classify the transition. Order matters: SLASHED dominates because
+        # it can subsume EXITED (exited_slashed counts as both, but we want
+        # the urgent alert, not the calm "exit complete" one).
+        transition: str | None = None
+        title: str | None = None
+        body: str | None = None
+        priority: str | None = None
+
+        if curr in _SLASHED_STATUSES and prev not in _SLASHED_STATUSES:
+            transition = f"slashed_{curr}"
+            title = f"validator {idx}{label_part} SLASHED"
+            body = f"status: {prev} -> {curr}"
+            priority = "urgent"
+        elif curr == "active_ongoing" and prev in _PENDING_STATUSES:
+            transition = "activated"
+            title = f"validator {idx}{label_part} ACTIVATED"
+            body = f"now attesting (was {prev})"
+        elif curr == "active_exiting" and prev == "active_ongoing":
+            transition = "exit_initiated"
+            title = f"validator {idx}{label_part} EXIT INITIATED"
+            body = "voluntary exit submitted; still attesting until exit epoch"
+        elif (
+            curr == "exited_unslashed"
+            and prev not in _EXITED_STATUSES
+            and prev not in _SLASHED_STATUSES
+        ):
+            transition = "exited"
+            title = f"validator {idx}{label_part} EXITED"
+            body = f"exit complete (was {prev})"
+        elif curr in _WITHDRAWAL_READY_STATUSES and prev not in _WITHDRAWAL_READY_STATUSES:
+            transition = "withdrawal_ready"
+            title = f"validator {idx}{label_part} WITHDRAWAL READY"
+            body = "funds claimable"
+
+        if transition is None or transition in history:
+            continue
+        history.append(transition)
+        notifier.send(title, body, priority=priority)
+        fired.append((idx, label, transition))
+
+    return fired
 
 
 def process_blind(state: dict, error_message: str, notifier: Notifier, cfg: AlertsConfig, now: int) -> None:

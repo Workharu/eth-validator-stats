@@ -30,6 +30,7 @@ from .alerts import (
     clear_blind_if_recovered,
     make_notifier,
     process_blind,
+    process_lifecycle_alerts,
     process_proposal_outcomes,
     process_upcoming_proposals,
     process_validator_alerts,
@@ -172,6 +173,12 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
             prev_slot = record.get("last_balance_at_slot")
             if prev_slot is not None:
                 record["previous_balance_at_slot"] = int(prev_slot)
+        # Snapshot the prior status so process_lifecycle_alerts can detect
+        # transitions (pending->active, active->slashed, etc.). First poll
+        # has no previous status, so transitions can't fire on day one.
+        prev_status = record.get("last_status")
+        if prev_status:
+            record["previous_status"] = prev_status
         record["pubkey"] = info_v.pubkey
         record["label"] = entry.label
         record["last_status"] = info_v.status
@@ -334,6 +341,11 @@ def run_check_once(args: argparse.Namespace) -> int:
     alerts = evaluate_alerts(rows, missed_threshold)
     configured = {row.index for row in rows}
     process_validator_alerts(state, configured, alerts, notifier, cfg.alerts, now)
+    # Lifecycle transitions (ACTIVATED / EXIT INITIATED / SLASHED / EXITED /
+    # WITHDRAWAL READY) are independent of the OFFLINE / MISSED churn —
+    # they fire one-shot per transition off the (previous_status,
+    # last_status) pair that poll() just refreshed.
+    process_lifecycle_alerts(state, configured, notifier)
 
     current_slot = int(state.get("current_slot", 0))
     info = chain_info_from_state(state)
@@ -588,8 +600,12 @@ def cmd_simulate(args: argparse.Namespace, *, _notifier=None) -> int:
         print(f"simulate: {e}", file=sys.stderr)
         return 1
 
+    # Mirror the priority the production pipeline would set so the
+    # simulate output is faithful to what a real transition looks like
+    # on the operator's phone. Only SLASHED carries `urgent` today.
+    priority = "urgent" if args.event == "slashed" else None
     try:
-        notifier.send(title, body)
+        notifier.send(title, body, priority=priority)
     except Exception as e:
         print(f"simulate failed: {e}", file=sys.stderr)
         return 1

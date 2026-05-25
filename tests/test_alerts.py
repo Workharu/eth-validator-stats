@@ -10,6 +10,7 @@ from eth_validator_stats.alerts import (
     clear_blind_if_recovered,
     make_notifier,
     process_blind,
+    process_lifecycle_alerts,
     process_proposal_outcomes,
     process_upcoming_proposals,
     process_validator_alerts,
@@ -22,9 +23,13 @@ from eth_validator_stats.alerts import (
 class FakeNotifier:
     def __init__(self):
         self.sent: list[tuple[str, str]] = []
+        # Lifecycle alerts also stash priority; non-lifecycle callers
+        # ignore this. Defaults to None when no priority was passed.
+        self.sent_with_priority: list[tuple[str, str, str | None]] = []
 
-    def send(self, title: str, body: str) -> None:
+    def send(self, title: str, body: str, *, priority: str | None = None) -> None:
         self.sent.append((title, body))
+        self.sent_with_priority.append((title, body, priority))
 
 
 def _cfg(cooldown_minutes=30, storm_threshold=10, ntfy=""):
@@ -650,3 +655,137 @@ def test_default_alerts_config_carries_repo_hosted_icon_url():
     cfg = AlertsConfig()
     assert cfg.icon_url.startswith("https://raw.githubusercontent.com/")
     assert "notification-icon.png" in cfg.icon_url
+
+
+# --- lifecycle alerts -------------------------------------------------------
+
+def _lifecycle_state(prev: str, curr: str, *, idx: int = 42, label: str = "v1") -> dict:
+    """Build a minimal state dict shaped like the one cli.poll() produces.
+
+    The lifecycle pipeline reads previous_status + last_status off the
+    per-validator record; it does NOT touch the liveness/balance fields.
+    """
+    return {
+        "validators": {
+            str(idx): {
+                "label": label,
+                "previous_status": prev,
+                "last_status": curr,
+            },
+        },
+    }
+
+
+def test_lifecycle_pending_initialized_to_active_ongoing_fires_activated():
+    state = _lifecycle_state("pending_initialized", "active_ongoing")
+    notif = FakeNotifier()
+
+    fired = process_lifecycle_alerts(state, {42}, notif)
+
+    assert fired == [(42, "v1", "activated")]
+    assert notif.sent_with_priority == [
+        ("validator 42 v1 ACTIVATED", "now attesting (was pending_initialized)", None)
+    ]
+
+
+def test_lifecycle_pending_queued_to_active_ongoing_also_fires_activated():
+    state = _lifecycle_state("pending_queued", "active_ongoing")
+    notif = FakeNotifier()
+    process_lifecycle_alerts(state, {42}, notif)
+    assert notif.sent[0][0] == "validator 42 v1 ACTIVATED"
+
+
+def test_lifecycle_activated_dedups_across_calls():
+    state = _lifecycle_state("pending_queued", "active_ongoing")
+    notif = FakeNotifier()
+    process_lifecycle_alerts(state, {42}, notif)
+    # Second poll with the same status pair (or with stale state) must not
+    # re-fire. The history list on the record is the dedup key.
+    process_lifecycle_alerts(state, {42}, notif)
+    assert len(notif.sent) == 1
+
+
+def test_lifecycle_active_ongoing_to_active_exiting_fires_exit_initiated():
+    state = _lifecycle_state("active_ongoing", "active_exiting")
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {42}, notif)
+    assert fired == [(42, "v1", "exit_initiated")]
+    assert notif.sent[0][0] == "validator 42 v1 EXIT INITIATED"
+
+
+def test_lifecycle_active_ongoing_to_active_slashed_fires_urgent():
+    state = _lifecycle_state("active_ongoing", "active_slashed")
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {42}, notif)
+    assert fired == [(42, "v1", "slashed_active_slashed")]
+    title, _, priority = notif.sent_with_priority[0]
+    assert title == "validator 42 v1 SLASHED"
+    assert priority == "urgent"
+
+
+def test_lifecycle_active_slashed_to_exited_slashed_does_not_double_fire():
+    """A validator that was already SLASHED in active_slashed and now
+    transitions to exited_slashed must not fire a second SLASHED alert
+    — the operator was already paged once."""
+    state = {
+        "validators": {
+            "42": {
+                "label": "v1",
+                "previous_status": "active_slashed",
+                "last_status": "exited_slashed",
+                # Mark the prior SLASHED alert as already fired.
+                "lifecycle_alerts_fired": ["slashed_active_slashed"],
+            },
+        },
+    }
+    notif = FakeNotifier()
+    process_lifecycle_alerts(state, {42}, notif)
+    # exited_slashed is a slashed status too, but transitioning between
+    # two slashed states should not re-fire (prev already in _SLASHED_STATUSES).
+    assert notif.sent == []
+
+
+def test_lifecycle_active_exiting_to_exited_unslashed_fires_exited():
+    state = _lifecycle_state("active_exiting", "exited_unslashed")
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {42}, notif)
+    assert fired == [(42, "v1", "exited")]
+    assert notif.sent[0][0] == "validator 42 v1 EXITED"
+
+
+def test_lifecycle_exited_unslashed_to_withdrawal_possible_fires_ready():
+    state = _lifecycle_state("exited_unslashed", "withdrawal_possible")
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {42}, notif)
+    assert fired == [(42, "v1", "withdrawal_ready")]
+    assert notif.sent[0][0] == "validator 42 v1 WITHDRAWAL READY"
+
+
+def test_lifecycle_ignores_unconfigured_validators():
+    """A validator that's in state but not in the configured set must be
+    skipped — pubkey-only entries that resolved to an index, validators
+    you've since removed from the config, etc."""
+    state = _lifecycle_state("pending_queued", "active_ongoing", idx=99)
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {1}, notif)  # 1 ≠ 99
+    assert fired == []
+    assert notif.sent == []
+
+
+def test_lifecycle_no_previous_status_is_quiet():
+    """First poll: previous_status is unset, so no transition is detected.
+    The validator's last_status was just populated; we wait until the
+    next poll to see if it changes."""
+    state = {"validators": {"42": {"label": "v1", "last_status": "active_ongoing"}}}
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {42}, notif)
+    assert fired == []
+    assert notif.sent == []
+
+
+def test_lifecycle_same_status_no_fire():
+    """Status didn't change — nothing to alert on."""
+    state = _lifecycle_state("active_ongoing", "active_ongoing")
+    notif = FakeNotifier()
+    fired = process_lifecycle_alerts(state, {42}, notif)
+    assert fired == []

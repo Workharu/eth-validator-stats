@@ -64,6 +64,43 @@ def build_recovered() -> tuple[str, str]:
     return ("MONITOR RECOVERED", "beacon node reachable again")
 
 
+# --- lifecycle transitions ---------------------------------------------------
+
+def build_activated(idx: int, label: str) -> tuple[str, str]:
+    return (
+        f"validator {idx}{_label_part(label)} ACTIVATED",
+        "now attesting (was pending_queued)",
+    )
+
+
+def build_exit_initiated(idx: int, label: str) -> tuple[str, str]:
+    return (
+        f"validator {idx}{_label_part(label)} EXIT INITIATED",
+        "voluntary exit submitted; still attesting until exit epoch",
+    )
+
+
+def build_slashed(idx: int, label: str) -> tuple[str, str]:
+    return (
+        f"validator {idx}{_label_part(label)} SLASHED",
+        "status: active_ongoing -> active_slashed",
+    )
+
+
+def build_exited(idx: int, label: str) -> tuple[str, str]:
+    return (
+        f"validator {idx}{_label_part(label)} EXITED",
+        "exit complete (was active_exiting)",
+    )
+
+
+def build_withdrawal_ready(idx: int, label: str) -> tuple[str, str]:
+    return (
+        f"validator {idx}{_label_part(label)} WITHDRAWAL READY",
+        "funds claimable",
+    )
+
+
 # Scope tells cmd_simulate whether to resolve a validator before calling
 # the builder. Validator-scoped builders take (idx, label, **kwargs);
 # global-scoped builders take just **kwargs (currently none).
@@ -76,4 +113,11 @@ EVENTS: dict[str, tuple[Callable, str]] = {
     "missed-proposal": (build_missed_proposal, "validator"),
     "blind": (build_blind, "global"),
     "recovered": (build_recovered, "global"),
+    # Lifecycle transitions. All validator-scoped; the operator picks
+    # which configured validator to demo the alert against.
+    "activated": (build_activated, "validator"),
+    "exit-initiated": (build_exit_initiated, "validator"),
+    "slashed": (build_slashed, "validator"),
+    "exited": (build_exited, "validator"),
+    "withdrawal-ready": (build_withdrawal_ready, "validator"),
 }

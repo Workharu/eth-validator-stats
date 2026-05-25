@@ -92,11 +92,50 @@ def test_build_recovered():
     assert body == "beacon node reachable again"
 
 
-def test_events_table_has_all_eight_events():
+# --- lifecycle builders -----------------------------------------------------
+
+def test_build_activated():
+    from eth_validator_stats._simulate import build_activated
+    title, body = build_activated(1234, "home-1")
+    assert title == "validator 1234 home-1 ACTIVATED"
+    assert "was pending_queued" in body
+
+
+def test_build_exit_initiated():
+    from eth_validator_stats._simulate import build_exit_initiated
+    title, body = build_exit_initiated(1234, "home-1")
+    assert title == "validator 1234 home-1 EXIT INITIATED"
+    assert "voluntary exit" in body
+
+
+def test_build_slashed():
+    from eth_validator_stats._simulate import build_slashed
+    title, body = build_slashed(1234, "home-1")
+    assert title == "validator 1234 home-1 SLASHED"
+    assert "active_slashed" in body
+
+
+def test_build_exited():
+    from eth_validator_stats._simulate import build_exited
+    title, body = build_exited(1234, "home-1")
+    assert title == "validator 1234 home-1 EXITED"
+    assert "exit complete" in body
+
+
+def test_build_withdrawal_ready():
+    from eth_validator_stats._simulate import build_withdrawal_ready
+    title, body = build_withdrawal_ready(1234, "home-1")
+    assert title == "validator 1234 home-1 WITHDRAWAL READY"
+    assert "claimable" in body
+
+
+def test_events_table_has_all_registered_events():
     expected = {
         "missed-attestation", "offline", "withdrawal",
         "proposing-soon", "proposed", "missed-proposal",
         "blind", "recovered",
+        # Lifecycle additions
+        "activated", "exit-initiated", "slashed", "exited", "withdrawal-ready",
     }
     assert set(EVENTS.keys()) == expected
 
@@ -105,6 +144,7 @@ def test_events_table_scopes_correct():
     validator_scoped = {
         "missed-attestation", "offline", "withdrawal",
         "proposing-soon", "proposed", "missed-proposal",
+        "activated", "exit-initiated", "slashed", "exited", "withdrawal-ready",
     }
     for name, (_, scope) in EVENTS.items():
         if name in validator_scoped:
@@ -155,7 +195,7 @@ def test_cmd_simulate_missed_attestation_uses_first_validator(tmp_path, monkeypa
 
     captured = []
     class StubNotifier:
-        def send(self, title, body):
+        def send(self, title, body, *, priority=None):
             captured.append((title, body))
 
     rc = cmd_simulate(_args("missed-attestation"), _notifier=StubNotifier())
@@ -170,7 +210,7 @@ def test_cmd_simulate_validator_flag_selects_by_index(tmp_path, monkeypatch):
 
     captured = []
     class StubNotifier:
-        def send(self, title, body):
+        def send(self, title, body, *, priority=None):
             captured.append((title, body))
 
     rc = cmd_simulate(_args("missed-attestation", validator=2), _notifier=StubNotifier())
@@ -183,7 +223,7 @@ def test_cmd_simulate_validator_flag_not_found_exits_1(tmp_path, monkeypatch, ca
     _cfg_with(tmp_path, monkeypatch, validators=[v1])
 
     class StubNotifier:
-        def send(self, *_): raise AssertionError("should not send")
+        def send(self, *_, **__): raise AssertionError("should not send")
 
     rc = cmd_simulate(_args("missed-attestation", validator=999), _notifier=StubNotifier())
     assert rc == 1
@@ -197,7 +237,7 @@ def test_cmd_simulate_pubkey_only_default_exits_1_with_hint(tmp_path, monkeypatc
     _cfg_with(tmp_path, monkeypatch, validators=[v])
 
     class StubNotifier:
-        def send(self, *_): raise AssertionError("should not send")
+        def send(self, *_, **__): raise AssertionError("should not send")
 
     rc = cmd_simulate(_args("missed-attestation"), _notifier=StubNotifier())
     assert rc == 1
@@ -215,13 +255,48 @@ def test_cmd_simulate_no_ntfy_topic_exits_1(tmp_path, monkeypatch, capsys):
     assert "ntfy_topic" in err
 
 
+def test_cmd_simulate_slashed_forwards_urgent_priority(tmp_path, monkeypatch):
+    """`simulate slashed` must mirror the production lifecycle pipeline by
+    flagging the push as ntfy Priority: urgent. Without this, the test push
+    arrives as a normal notification and the operator can't verify their
+    DND-bypass setup works."""
+    v = ConfigEntry(identifier="1", label="a", pubkey=None, index=1)
+    _cfg_with(tmp_path, monkeypatch, validators=[v])
+
+    captured: list[tuple[str, str, str | None]] = []
+    class StubNotifier:
+        def send(self, title, body, *, priority=None):
+            captured.append((title, body, priority))
+
+    rc = cmd_simulate(_args("slashed"), _notifier=StubNotifier())
+    assert rc == 0
+    assert len(captured) == 1
+    title, _, priority = captured[0]
+    assert "SLASHED" in title
+    assert priority == "urgent"
+
+
+def test_cmd_simulate_other_events_no_priority(tmp_path, monkeypatch):
+    """Non-slashed lifecycle events ride the default ntfy priority."""
+    v = ConfigEntry(identifier="1", label="a", pubkey=None, index=1)
+    _cfg_with(tmp_path, monkeypatch, validators=[v])
+
+    captured: list[tuple[str, str, str | None]] = []
+    class StubNotifier:
+        def send(self, title, body, *, priority=None):
+            captured.append((title, body, priority))
+
+    cmd_simulate(_args("activated"), _notifier=StubNotifier())
+    assert captured[0][2] is None
+
+
 def test_cmd_simulate_blind_event_does_not_require_validator(tmp_path, monkeypatch):
     v = ConfigEntry(identifier="1", label="a", pubkey=None, index=1)
     _cfg_with(tmp_path, monkeypatch, validators=[v])
 
     captured = []
     class StubNotifier:
-        def send(self, title, body):
+        def send(self, title, body, *, priority=None):
             captured.append((title, body))
 
     rc = cmd_simulate(_args("blind"), _notifier=StubNotifier())
@@ -235,7 +310,7 @@ def test_cmd_simulate_event_kwargs_forwarded(tmp_path, monkeypatch):
 
     captured = []
     class StubNotifier:
-        def send(self, title, body):
+        def send(self, title, body, *, priority=None):
             captured.append((title, body))
 
     rc = cmd_simulate(_args("missed-attestation", last=7), _notifier=StubNotifier())
@@ -249,7 +324,7 @@ def test_cmd_simulate_notifier_raises_exits_1(tmp_path, monkeypatch, capsys):
     _cfg_with(tmp_path, monkeypatch, validators=[v])
 
     class BoomNotifier:
-        def send(self, *_):
+        def send(self, *_, **__):
             import httpx
             req = httpx.Request("POST", "https://ntfy.example/t")
             resp = httpx.Response(500, request=req)
