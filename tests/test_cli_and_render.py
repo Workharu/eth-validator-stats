@@ -246,3 +246,63 @@ def test_poll_records_last_poll_ts(monkeypatch):
     state: dict = {}
     poll(cfg, state)
     assert state["last_poll_ts"] == 1_700_000_000
+
+
+def test_cmd_status_is_read_only_by_default(monkeypatch, tmp_path):
+    """`evs status` must not hit the beacon node or write state.
+    It renders whatever the watcher / cron has already produced."""
+    import json
+    from eth_validator_stats import cli as cli_mod
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({
+        "chain_info": {"genesis_time": 0, "seconds_per_slot": 12, "slots_per_epoch": 32},
+        "current_slot": 100,
+        "last_poll_ts": 1_700_000_000,
+        "validators": {
+            "42": {
+                "pubkey": "0xabc",
+                "label": "v1",
+                "last_status": "active_ongoing",
+                "last_balance_gwei": 32_000_000_000,
+                "liveness": [[10, 1], [11, 1]],
+            }
+        },
+    }))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(state_file))
+
+    poll_called = {"v": False}
+    save_called = {"v": False}
+    monkeypatch.setattr(cli_mod, "poll", lambda cfg, s: poll_called.__setitem__("v", True) or [])
+    monkeypatch.setattr(cli_mod, "save_state", lambda p, s: save_called.__setitem__("v", True))
+    monkeypatch.setattr(cli_mod, "load_config", lambda: object())
+
+    import argparse
+    args = argparse.Namespace(refresh=False)
+    rc = cli_mod.cmd_status(args)
+    assert rc == 0
+    assert poll_called["v"] is False, "status should not poll by default"
+    assert save_called["v"] is False, "status should not write state by default"
+
+
+def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
+    """`evs status --refresh` opts back into the old behavior."""
+    import json
+    from eth_validator_stats import cli as cli_mod
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({"chain_info": None, "validators": {}}))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(state_file))
+
+    poll_called = {"v": False}
+    save_called = {"v": False}
+    monkeypatch.setattr(cli_mod, "poll", lambda cfg, s: poll_called.__setitem__("v", True) or [])
+    monkeypatch.setattr(cli_mod, "save_state", lambda p, s: save_called.__setitem__("v", True))
+    monkeypatch.setattr(cli_mod, "load_config", lambda: object())
+
+    import argparse
+    args = argparse.Namespace(refresh=True)
+    rc = cli_mod.cmd_status(args)
+    assert rc == 0
+    assert poll_called["v"] is True
+    assert save_called["v"] is True

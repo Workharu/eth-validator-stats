@@ -311,11 +311,45 @@ def cmd_info(args: argparse.Namespace) -> int:
     return 0 if all(r[1] == "OK" for r in results) else 1
 
 
+def _rows_from_state(cfg: AppConfig, state: dict) -> list[DisplayRow]:
+    """Render-only path: reconstruct DisplayRows from persisted state without
+    contacting the beacon node. Used by `evs status` so it never races the
+    `watch` service or writes a stale snapshot back over fresher data."""
+    vstate = state.get("validators", {})
+    rows: list[DisplayRow] = []
+    for entry in getattr(cfg, "validators", []):
+        record: dict | None = None
+        # Match by pubkey first (canonical), index second (legacy entries).
+        if entry.pubkey is not None:
+            pk = entry.pubkey.lower()
+            for rec in vstate.values():
+                if rec.get("pubkey", "").lower() == pk:
+                    record = rec
+                    break
+        if record is None and entry.index is not None:
+            record = vstate.get(str(entry.index))
+        if record is None:
+            continue
+        rows.append(
+            DisplayRow(
+                index=int(next(k for k, v in vstate.items() if v is record)),
+                label=entry.label,
+                status=str(record.get("last_status", "unknown")),
+                balance_gwei=int(record.get("last_balance_gwei", 0)),
+                liveness=[(int(e), int(a)) for e, a in record.get("liveness", [])],
+            )
+        )
+    return rows
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     cfg = load_config()
     state = load_state(state_path())
-    rows = poll(cfg, state)
-    save_state(state_path(), state)
+    if getattr(args, "refresh", False):
+        rows = poll(cfg, state)
+        save_state(state_path(), state)
+    else:
+        rows = _rows_from_state(cfg, state)
     Console().print(build_table(rows, n_atts=N_ATTS_DISPLAYED))
     return 0
 
@@ -699,7 +733,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_status = sub.add_parser("status", help="Print a snapshot table of all configured validators.")
+    p_status = sub.add_parser(
+        "status",
+        help="Render the latest snapshot from on-disk state (read-only). "
+             "Pass --refresh to also poll the beacon node first.",
+    )
+    p_status.add_argument(
+        "--refresh", action="store_true",
+        help="Poll the beacon node and update state before rendering. "
+             "Avoid when the watch service is running — they will race on the state file.",
+    )
     p_status.set_defaults(func=cmd_status)
 
     p_check = sub.add_parser("check", help="Cron mode: print offenders, exit 2 if any.")

@@ -126,10 +126,10 @@ def test_status_warns_once_when_liveness_unsupported(temp_config, caplog):
     cfg_path, state_path = temp_config
     with caplog.at_level(logging.WARNING, logger="eth_validator_stats.cli"):
         with _patch_client(make_handler(support_liveness=False)):
-            cli.main(["status"])
+            cli.main(["status", "--refresh"])
             first_records = list(caplog.records)
             caplog.clear()
-            cli.main(["status"])
+            cli.main(["status", "--refresh"])
             second_records = list(caplog.records)
     assert any(
         "does not implement /eth/v1/validator/liveness" in r.message
@@ -144,7 +144,7 @@ def test_status_warns_once_when_liveness_unsupported(temp_config, caplog):
 
 def test_status_with_liveness_works_end_to_end(temp_config, capsys):
     with _patch_client(make_handler(support_liveness=True)):
-        rc = cli.main(["status"])
+        rc = cli.main(["status", "--refresh"])
     out = capsys.readouterr().out
     assert rc == 0
     # The table should render validator 1
