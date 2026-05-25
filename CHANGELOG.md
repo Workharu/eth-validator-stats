@@ -15,6 +15,12 @@ For the Debian-format release notes (used by the `.deb` package), see
   - `alerts.heartbeat_url` POSTs a zero-byte heartbeat after every successful poll. Compatible with healthchecks.io, Better Stack, Cronitor, self-hosted uptime-kuma, or any URL that accepts an unauthenticated POST. We recommend healthchecks.io — free, GitHub-login signup, built-in ntfy integration so alerts route to your existing topic. Setup is documented in [`docs/USAGE.md`](docs/USAGE.md#monitoring-the-monitor).
   - Failures of `heartbeat_url` POSTs are logged at WARNING and never crash the watch loop — best-effort by design.
 
+### Changed
+- **`evs status` is now read-only by default.** Renders the latest snapshot from on-disk state instead of polling the beacon node. Use `evs status --refresh` to opt back into the old poll-and-save behavior. Background: when both `evs status` and the systemd `watch` service ran together, they raced on the same state file and could overwrite each other's history. `status` no longer writes, so the race is gone. Cron users were already supposed to use `evs check`; if you cron'd `evs status`, switch to `evs check` (it's the documented cron command and was already exit-code-aware).
+- **State file is now auto-shared across callers when a system install is present.** `evs status` (as your user), `sudo evs status`, and the `watch` service all now read/write `/var/lib/eth-validator-stats/state.json` when that directory exists. Previously each user kept its own copy under `~/.local/share/eth-validator-stats/`, so the three views diverged. Falls back to the per-user platformdirs path on pipx/`--user` installs.
+- **`evs status` now shows a "last updated: 2m ago" footer** so a dead `watch` service is obvious at a glance. Coarse-grained (s/m/h/d ago) — operators want "is it alive?", not exact seconds.
+- **First-run `evs status` (no state yet) prints an onboarding hint** listing three ways to populate state (start the watcher, run `evs check` once, or `evs status --refresh`), instead of an empty table.
+
 ## [0.4.0] - 2026-05-25
 ### Removed
 - **Breaking:** legacy TOML config support. The CLI now reads YAML only (`.yml` / `.yaml`). The `--migrate` flag, the interactive "found legacy TOML" prompt on `init`, the `legacy_toml_path` helper, and the `tomllib` import are all gone. Every release since 0.2.0 has shipped YAML as the canonical format, so this should affect no real-world installs. Anything with a `.toml` suffix is now rejected with `unsupported config suffix`.
