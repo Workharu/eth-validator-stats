@@ -3,21 +3,34 @@ set -e
 
 case "$1" in
     configure)
-        # 1. Create system user (idempotent)
+        # 1. Create the config + state dirs FIRST. adduser below points the
+        # service user's home at /var/lib/eth-validator-stats and prints a
+        # scary "home dir can't be accessed" warning if it doesn't exist
+        # yet — even though --no-create-home means it would never have
+        # created it anyway. Creating the dirs upfront silences that and
+        # also gives chown something to operate on.
+        # We deliberately do NOT ship these dirs in the .deb itself so
+        # dpkg never owns them — that way user-created files inside them
+        # are not removed on `apt remove`.
+        mkdir -p /etc/eth-validator-stats /var/lib/eth-validator-stats
+        chmod 0750 /etc/eth-validator-stats /var/lib/eth-validator-stats
+
+        # 2. Create the system user + group (idempotent). The home dir we
+        # point at now exists, so adduser is quiet.
+        if ! getent group eth-validator-stats >/dev/null; then
+            addgroup --system eth-validator-stats
+        fi
         if ! getent passwd eth-validator-stats >/dev/null; then
             adduser --system --no-create-home \
                     --home /var/lib/eth-validator-stats \
                     --shell /usr/sbin/nologin \
-                    --group eth-validator-stats
+                    --ingroup eth-validator-stats \
+                    eth-validator-stats
         fi
 
-        # 2. Create + chown config and state dirs. We deliberately do NOT
-        # ship these dirs in the .deb so dpkg never owns them — that way
-        # user-created files inside them are not removed on `apt remove`.
-        mkdir -p /etc/eth-validator-stats /var/lib/eth-validator-stats
+        # 3. chown after the user exists.
         chown -R eth-validator-stats:eth-validator-stats \
             /etc/eth-validator-stats /var/lib/eth-validator-stats
-        chmod 0750 /etc/eth-validator-stats /var/lib/eth-validator-stats
 
         # 3. Helpful next-step message
         cat <<'EOF'

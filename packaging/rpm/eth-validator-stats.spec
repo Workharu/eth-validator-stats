@@ -199,6 +199,11 @@ fi
   only checked ~/.config and erred out on system installs unless the
   systemd service was used. Resolver order is now:
   $ETH_VALIDATOR_STATS_CONFIG -> /etc -> ~/.config.
+- Fix (.deb only): postinst no longer prints the alarming "home dir
+  /var/lib/eth-validator-stats can't be accessed: No such file or
+  directory" warning during first install. Reordered the steps so
+  config and state directories are created before adduser references
+  the service user's home.
 - New: short CLI alias `evs` (3 chars). Same binary as
   eth-validator-stats, just easier to type.
 - Docs: substantial README polish for onboarding (pick-your-install
