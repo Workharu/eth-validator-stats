@@ -201,16 +201,13 @@ def test_configure_logging_explicit_arg_wins_over_env(monkeypatch):
 
 
 def test_version_flag_prints_version_and_exits_zero(capsys):
-    """`eth-validator-stats --version` prints `<prog> <semver>` and exits 0."""
+    """`eth-validator-stats --version` prints `<prog> <semver>` and returns 0."""
     import re
-
-    import pytest
 
     from eth_validator_stats.cli import main
 
-    with pytest.raises(SystemExit) as exc:
-        main(["--version"])
-    assert exc.value.code == 0
+    rc = main(["--version"])
+    assert rc == 0
     out = capsys.readouterr().out
     assert out.startswith("eth-validator-stats ")
     # Version may be a semver like "0.3.5" or the "unknown" fallback.
@@ -369,3 +366,49 @@ def test_cmd_status_prints_hint_when_state_is_empty(monkeypatch, tmp_path, capsy
     assert rc == 0
     # Hint should mention the way out: check, watch, or --refresh.
     assert "evs check" in out or "--refresh" in out or "watch" in out.lower()
+
+
+def test_main_returns_int_on_unknown_command():
+    """The Typer wrapper must translate Click's UsageError exit code to an int,
+    not raise SystemExit. Existing test infra relies on `rc = main([...])`."""
+    from eth_validator_stats.cli import main
+    rc = main(["nonexistent-command"])
+    assert isinstance(rc, int)
+    assert rc == 2
+
+
+def test_main_help_lists_all_top_level_commands(capsys):
+    """`evs --help` succeeds and the captured output mentions every top-level
+    command. Doesn't pin exact wording — Rich-styled output can drift."""
+    from eth_validator_stats.cli import main
+    rc = main(["--help"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    for command in (
+        "status", "check", "watch", "info", "init",
+        "install-service", "uninstall-service", "simulate", "validators",
+    ):
+        assert command in out, f"--help output missing {command!r}"
+
+
+def test_init_rejects_host_and_beacon_url_together():
+    """Mutex check: argparse used add_mutually_exclusive_group; Typer uses a
+    runtime check. The exit code (2) and non-raising behavior must match."""
+    from eth_validator_stats.cli import main
+    rc = main(["init", "--host", "x", "--beacon-url", "http://y"])
+    assert rc == 2
+
+
+def test_init_rejects_ntfy_topic_and_no_ntfy_together():
+    """Same mutex shape for the ntfy pair."""
+    from eth_validator_stats.cli import main
+    rc = main(["init", "--ntfy-topic", "alerts", "--no-ntfy"])
+    assert rc == 2
+
+
+def test_main_returns_int_on_help_exit():
+    """Help is implemented via Click's Exit(0). The wrapper must translate."""
+    from eth_validator_stats.cli import main
+    rc = main(["status", "--help"])
+    assert isinstance(rc, int)
+    assert rc == 0

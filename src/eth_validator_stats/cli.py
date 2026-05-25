@@ -7,6 +7,7 @@ import os
 import sys
 import tempfile
 import time
+from enum import Enum as _Enum
 from pathlib import Path
 
 # Importing readline (when available) hooks GNU readline into every
@@ -21,7 +22,9 @@ try:
 except ImportError:  # pragma: no cover — Windows / minimal Python builds
     pass
 
+import click  # for exception types; transitive via typer
 import httpx
+import typer
 from rich.console import Console
 
 from ._simulate import EVENTS
@@ -764,205 +767,228 @@ def _get_version() -> str:
         return "unknown"
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="eth-validator-stats",
-        description="Tiny self-hosted CLI for Ethereum validator stats.",
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"%(prog)s {_get_version()}",
-        help="Print the installed package version and exit.",
-    )
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default=None,
-        help="Log level for stderr output (default: INFO; override via ETH_VALIDATOR_STATS_LOG_LEVEL).",
-    )
-    sub = parser.add_subparsers(dest="cmd", required=True)
+def _version_callback(value: bool) -> None:
+    """Eager `--version` callback. Prints `<prog> <semver>` and exits 0."""
+    if value:
+        typer.echo(f"eth-validator-stats {_get_version()}")
+        raise typer.Exit()
 
-    p_status = sub.add_parser(
-        "status",
-        help="Render the latest snapshot from on-disk state (read-only). "
-             "Pass --refresh to also poll the beacon node first.",
-    )
-    p_status.add_argument(
-        "--refresh", action="store_true",
+
+# Generated dynamically from the EVENTS dict so the two cannot drift. Member
+# names are the event keys with hyphens swapped for underscores (Python identifier
+# rules); each member's .value is the original key string, which cmd_simulate
+# uses to look up EVENTS.
+_SimEvent = _Enum(
+    "SimEvent",
+    {k.replace("-", "_"): k for k in EVENTS.keys()},
+    type=str,
+)
+
+
+app = typer.Typer(
+    help="Ethereum validator monitor. Polls a beacon node and pushes alerts via ntfy.",
+    rich_markup_mode="rich",
+    add_completion=False,
+    no_args_is_help=True,
+    pretty_exceptions_show_locals=False,
+)
+
+
+@app.callback()
+def _root(
+    ctx: typer.Context,
+    log_level: str | None = typer.Option(
+        None, "--log-level",
+        help="Log level for stderr output (default: INFO; override via ETH_VALIDATOR_STATS_LOG_LEVEL).",
+    ),
+    version: bool = typer.Option(
+        False, "--version",
+        help="Print the installed package version and exit.",
+        callback=_version_callback, is_eager=True,
+    ),
+) -> None:
+    """Root callback: applies --log-level, handles --version eagerly."""
+    configure_logging(log_level)
+
+
+@app.command()
+def status(
+    refresh: bool = typer.Option(
+        False, "--refresh",
         help="Poll the beacon node and update state before rendering. "
              "Avoid when the watch service is running — they will race on the state file.",
-    )
-    p_status.set_defaults(func=cmd_status)
+    ),
+) -> None:
+    """Render the latest snapshot from on-disk state (read-only).
 
-    p_check = sub.add_parser("check", help="Cron mode: print offenders, exit 2 if any.")
-    p_check.add_argument("--missed", type=int, default=None, help="Consecutive missed attestations to alert on (overrides alerts.missed_attestations_threshold in config; config default is 2).")
-    p_check.set_defaults(func=cmd_check)
+    Pass --refresh to also poll the beacon node first."""
+    rc = cmd_status(argparse.Namespace(refresh=refresh))
+    raise typer.Exit(code=rc)
 
-    p_watch = sub.add_parser(
-        "watch",
-        help="Long-running service mode: loop the check cycle until signalled.",
-    )
-    p_watch.add_argument(
-        "--interval", type=float, default=60.0,
-        help="Seconds between check iterations (default: 60).",
-    )
-    p_watch.add_argument(
-        "--missed", type=int, default=None,
-        help="Consecutive missed attestations to alert on (passed through to each iteration).",
-    )
+
+@app.command()
+def check(
+    missed: int | None = typer.Option(
+        None, "--missed",
+        help="Consecutive missed attestations to alert on (overrides "
+             "alerts.missed_attestations_threshold in config; config default is 2).",
+    ),
+) -> None:
+    """Cron mode: print offenders, exit 2 if any."""
+    rc = cmd_check(argparse.Namespace(missed=missed))
+    raise typer.Exit(code=rc)
+
+
+@app.command()
+def watch(
+    interval: float = typer.Option(60.0, "--interval", help="Seconds between check iterations (default: 60)."),
+    missed: int | None = typer.Option(None, "--missed", help="Consecutive missed attestations to alert on (passed through to each iteration)."),
+) -> None:
+    """Long-running service mode: loop the check cycle until signalled."""
     from ._watch import cmd_watch as _cmd_watch
-    p_watch.set_defaults(func=_cmd_watch)
+    rc = _cmd_watch(argparse.Namespace(interval=interval, missed=missed))
+    raise typer.Exit(code=rc)
 
-    p_info = sub.add_parser("info", help="Probe the beacon node and report client/version + endpoint support.")
-    p_info.set_defaults(func=cmd_info)
 
-    p_init = sub.add_parser("init", help="Interactive (or flag-driven) onboarding wizard.")
-    host_group = p_init.add_mutually_exclusive_group()
-    host_group.add_argument("--host", help="Beacon node host to scan (mutually exclusive with --beacon-url).")
-    host_group.add_argument("--beacon-url", help="Full beacon node URL, skip the scan.")
-    p_init.add_argument("--auth-token", help="Bearer token for beacon API auth.")
-    p_init.add_argument("--validator", help="Pubkey or index of the starter validator.")
-    p_init.add_argument("--label", help="Label for the starter validator.")
-    ntfy_group = p_init.add_mutually_exclusive_group()
-    ntfy_group.add_argument("--ntfy-topic", help="ntfy topic name or full URL.")
-    ntfy_group.add_argument("--no-ntfy", action="store_true", help="Skip notification setup.")
-    p_init.add_argument("--yes", action="store_true", help="Accept defaults and skip confirmation prompts.")
-    p_init.add_argument("--force", action="store_true", help="Overwrite existing config.")
-    p_init.add_argument(
-        "--system",
-        action="store_true",
+@app.command()
+def info() -> None:
+    """Probe the beacon node and report client/version + endpoint support."""
+    rc = cmd_info(argparse.Namespace())
+    raise typer.Exit(code=rc)
+
+
+@app.command()
+def init(
+    host: str | None = typer.Option(None, "--host", help="Beacon node host to scan (mutually exclusive with --beacon-url)."),
+    beacon_url: str | None = typer.Option(None, "--beacon-url", help="Full beacon node URL, skip the scan."),
+    auth_token: str | None = typer.Option(None, "--auth-token", help="Bearer token for beacon API auth."),
+    validator: str | None = typer.Option(None, "--validator", help="Pubkey or index of the starter validator."),
+    label: str | None = typer.Option(None, "--label", help="Label for the starter validator."),
+    ntfy_topic: str | None = typer.Option(None, "--ntfy-topic", help="ntfy topic name or full URL."),
+    no_ntfy: bool = typer.Option(False, "--no-ntfy", help="Skip notification setup."),
+    yes: bool = typer.Option(False, "--yes", help="Accept defaults and skip confirmation prompts."),
+    force: bool = typer.Option(False, "--force", help="Overwrite existing config."),
+    system: bool = typer.Option(
+        False, "--system",
         help="Write to /etc/eth-validator-stats/config.yml and apply system-service ownership "
              "(requires root and an eth-validator-stats system user; meant for distro-package installs).",
-    )
-    p_init.set_defaults(func=cmd_init)
+    ),
+) -> None:
+    """Interactive (or flag-driven) onboarding wizard."""
+    if host is not None and beacon_url is not None:
+        raise click.exceptions.UsageError("--host and --beacon-url are mutually exclusive")
+    if ntfy_topic is not None and no_ntfy:
+        raise click.exceptions.UsageError("--ntfy-topic and --no-ntfy are mutually exclusive")
+    rc = cmd_init(argparse.Namespace(
+        host=host, beacon_url=beacon_url, auth_token=auth_token,
+        validator=validator, label=label,
+        ntfy_topic=ntfy_topic, no_ntfy=no_ntfy,
+        yes=yes, force=force, system=system,
+    ))
+    raise typer.Exit(code=rc)
 
-    # install-service / uninstall-service: register a systemd unit pointing at
-    # this entrypoint. Loaded lazily so non-Linux users running --help don't
-    # pay the cost of importing pwd/grp.
-    p_install_svc = sub.add_parser(
-        "install-service",
-        help="Register a systemd unit for the watcher (one-time setup for pipx installs).",
-    )
-    p_install_svc.add_argument(
-        "--user", action="store_true",
-        help="Install as a --user unit (no sudo). Default is system scope (needs sudo).",
-    )
-    p_install_svc.add_argument(
-        "--run-as", default=None,
-        help="System-scope only: override the user the service runs as (default: $SUDO_USER).",
-    )
-    p_install_svc.add_argument(
-        "--force", action="store_true",
-        help="Overwrite an existing unit file even if it is owned by a distro package.",
-    )
+
+@app.command("install-service")
+def install_service(
+    user: bool = typer.Option(False, "--user", help="Install as a --user unit (no sudo). Default is system scope (needs sudo)."),
+    run_as: str | None = typer.Option(None, "--run-as", help="System-scope only: override the user the service runs as (default: $SUDO_USER)."),
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing unit file even if it is owned by a distro package."),
+) -> None:
+    """Register a systemd unit for the watcher (one-time setup for pipx installs)."""
     from ._install_service import cmd_install_service as _cmd_install_svc
-    p_install_svc.set_defaults(func=_cmd_install_svc)
+    rc = _cmd_install_svc(argparse.Namespace(user=user, run_as=run_as, force=force))
+    raise typer.Exit(code=rc)
 
-    p_uninstall_svc = sub.add_parser(
-        "uninstall-service",
-        help="Remove the systemd unit registered by `install-service`.",
-    )
-    p_uninstall_svc.add_argument(
-        "--user", action="store_true",
-        help="Target the --user unit (default: system scope, needs sudo).",
-    )
-    p_uninstall_svc.add_argument(
-        "--purge", action="store_true",
-        help="Also delete /etc/eth-validator-stats and /var/lib/eth-validator-stats.",
-    )
+
+@app.command("uninstall-service")
+def uninstall_service(
+    user: bool = typer.Option(False, "--user", help="Target the --user unit (default: system scope, needs sudo)."),
+    purge: bool = typer.Option(False, "--purge", help="Also delete /etc/eth-validator-stats and /var/lib/eth-validator-stats."),
+) -> None:
+    """Remove the systemd unit registered by `install-service`."""
     from ._install_service import cmd_uninstall_service as _cmd_uninstall_svc
-    p_uninstall_svc.set_defaults(func=_cmd_uninstall_svc)
+    rc = _cmd_uninstall_svc(argparse.Namespace(user=user, purge=purge))
+    raise typer.Exit(code=rc)
 
-    p_sim = sub.add_parser(
-        "simulate",
-        help="Send one test ntfy push matching a real alert template. State-free.",
-    )
-    p_sim.add_argument(
-        "event",
-        choices=list(EVENTS.keys()),
-        help="Which alert template to fire.",
-    )
-    p_sim.add_argument(
-        "--validator", type=int, default=None,
-        help="Validator index to use (default: first configured).",
-    )
-    p_sim.add_argument("--last", type=int, default=None,
-                       help="missed-attestation: N consecutive misses (default 2).")
-    p_sim.add_argument("--status", default=None,
-                       help="offline: validator status string (default 'slashed').")
-    p_sim.add_argument("--amount-eth", dest="amount_eth", type=float, default=None,
-                       help="withdrawal: ETH amount (default 0.001).")
-    p_sim.add_argument("--slot", type=int, default=None,
-                       help="proposing-soon/proposed/missed-proposal: slot number (default 12345).")
-    p_sim.add_argument("--delay", default=None,
-                       help="proposing-soon: human-readable delay (default '~6 min').")
-    p_sim.set_defaults(func=cmd_simulate)
 
-    # validators add / list / rm — CRUD on config.yml without editing YAML.
-    p_val = sub.add_parser(
-        "validators",
-        help="Add, list, or remove validators (without editing config.yml by hand).",
-    )
-    val_sub = p_val.add_subparsers(dest="val_cmd", required=True)
+@app.command()
+def simulate(
+    event: _SimEvent = typer.Argument(..., help="Which alert template to fire."),
+    validator: int | None = typer.Option(None, "--validator", help="Validator index to use (default: first configured)."),
+    last: int | None = typer.Option(None, "--last", help="missed-attestation: N consecutive misses (default 2)."),
+    status: str | None = typer.Option(None, "--status", help="offline: validator status string (default 'slashed')."),
+    amount_eth: float | None = typer.Option(None, "--amount-eth", help="withdrawal: ETH amount (default 0.001)."),
+    slot: int | None = typer.Option(None, "--slot", help="proposing-soon/proposed/missed-proposal: slot number (default 12345)."),
+    delay: str | None = typer.Option(None, "--delay", help="proposing-soon: human-readable delay (default '~6 min')."),
+) -> None:
+    """Send one test ntfy push matching a real alert template. State-free."""
+    rc = cmd_simulate(argparse.Namespace(
+        event=event.value, validator=validator,
+        last=last, status=status, amount_eth=amount_eth,
+        slot=slot, delay=delay,
+    ))
+    raise typer.Exit(code=rc)
 
-    from ._validators_cmd import (
-        cmd_validators_add as _cmd_val_add,
-    )
-    from ._validators_cmd import (
-        cmd_validators_list as _cmd_val_list,
-    )
-    from ._validators_cmd import (
-        cmd_validators_rm as _cmd_val_rm,
-    )
 
-    p_val_add = val_sub.add_parser(
-        "add",
-        help="Add a validator by pubkey (0x...) or numeric index.",
-    )
-    p_val_add.add_argument("identifier", help="Validator pubkey (0x...) or index.")
-    p_val_add.add_argument(
-        "--label", default=None,
-        help="Friendly label for the validator (optional).",
-    )
-    p_val_add.add_argument(
-        "--no-verify", action="store_true",
-        help="Skip the beacon-node existence check. Saves the entry as-is.",
-    )
-    p_val_add.set_defaults(func=_cmd_val_add)
+validators_app = typer.Typer(
+    help="Add, list, or remove validators (without editing config.yml by hand).",
+    rich_markup_mode="rich",
+    no_args_is_help=True,
+)
+app.add_typer(validators_app, name="validators")
 
-    p_val_list = val_sub.add_parser(
-        "list",
-        help="Print the validators currently in the config.",
-    )
-    p_val_list.add_argument(
-        "--status", action="store_true",
-        help="Also hit the beacon node for live status + balance.",
-    )
-    p_val_list.set_defaults(func=_cmd_val_list)
 
-    p_val_rm = val_sub.add_parser(
-        "rm",
-        help="Remove a validator (by index, pubkey, or label).",
-    )
-    p_val_rm.add_argument(
-        "identifier",
-        help="Index, pubkey (0x...), or label of the validator to remove.",
-    )
-    p_val_rm.add_argument(
-        "--yes", action="store_true",
-        help="Skip the confirmation prompt.",
-    )
-    p_val_rm.set_defaults(func=_cmd_val_rm)
+@validators_app.command("add")
+def validators_add(
+    identifier: str = typer.Argument(..., help="Validator pubkey (0x...) or index."),
+    label: str | None = typer.Option(None, "--label", help="Friendly label for the validator (optional)."),
+    no_verify: bool = typer.Option(False, "--no-verify", help="Skip the beacon-node existence check. Saves the entry as-is."),
+) -> None:
+    """Add a validator by pubkey (0x...) or numeric index."""
+    from ._validators_cmd import cmd_validators_add as _cmd
+    rc = _cmd(argparse.Namespace(identifier=identifier, label=label, no_verify=no_verify))
+    raise typer.Exit(code=rc)
 
-    return parser
+
+@validators_app.command("list")
+def validators_list(
+    status: bool = typer.Option(False, "--status", help="Also hit the beacon node for live status + balance."),
+) -> None:
+    """Print the validators currently in the config."""
+    from ._validators_cmd import cmd_validators_list as _cmd
+    rc = _cmd(argparse.Namespace(status=status))
+    raise typer.Exit(code=rc)
+
+
+@validators_app.command("rm")
+def validators_rm(
+    identifier: str = typer.Argument(..., help="Index, pubkey (0x...), or label of the validator to remove."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+) -> None:
+    """Remove a validator (by index, pubkey, or label)."""
+    from ._validators_cmd import cmd_validators_rm as _cmd
+    rc = _cmd(argparse.Namespace(identifier=identifier, yes=yes))
+    raise typer.Exit(code=rc)
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    configure_logging(getattr(args, "log_level", None))
-    return args.func(args)
+    """Entry point. Returns int exit code (does NOT raise SystemExit) so the
+    existing test suite that calls `rc = main([...])` continues to work."""
+    try:
+        result = app(args=argv, standalone_mode=False)
+        # In standalone_mode=False, typer.Exit(code=N) causes app() to return N
+        # directly rather than raising. Honour that code.
+        if isinstance(result, int):
+            return result
+        return 0
+    except click.exceptions.Exit as e:
+        return int(e.exit_code)
+    except click.exceptions.UsageError as e:
+        e.show()
+        return e.exit_code  # Click default for UsageError is 2
+    except click.exceptions.ClickException as e:
+        e.show()
+        return e.exit_code
 
 
 if __name__ == "__main__":
