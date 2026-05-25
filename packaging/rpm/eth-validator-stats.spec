@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.5
+Version:        0.3.6
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -201,6 +201,22 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.6-1
+- Fix: `eth-validator-stats status` (and the other read-only
+  subcommands) no longer crash with a PermissionError traceback when
+  invoked as a non-root user against an .rpm-installed system config.
+  Python 3.11+ propagates PermissionError from Path.exists() (rather
+  than silently returning False as 3.10 did), so the resolver's
+  /etc/<pkg>/config.yml existence check was bailing the whole CLI.
+  The CLI now produces a clear actionable message instead:
+      config at /etc/.../config.yml is not readable by the current
+      user. Re-run with sudo, or add yourself to the
+      eth-validator-stats group: sudo usermod -aG eth-validator-stats $USER
+- Packaging: chmod /etc/eth-validator-stats is now 0755 (was 0750)
+  so non-group users can at least see the config file exists. The
+  config file itself stays 0640 — secrets (beacon_auth_token,
+  ntfy_topic) remain group-readable only.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.5-1
 - New: `eth-validator-stats --version` (and `evs --version`) prints
   the installed package version. Reads from importlib.metadata so it
