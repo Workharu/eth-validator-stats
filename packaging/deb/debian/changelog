@@ -1,3 +1,25 @@
+eth-validator-stats (0.3.7-1) unstable; urgency=medium
+
+  * Fix: `init --system` now writes /etc/<pkg>/config.yml with mode
+    0644 instead of 0640. Any user can now run `eth-validator-stats
+    status` against a system install without sudo or group
+    membership. Validator pubkeys/indices are public on chain, beacon
+    URLs are typically local, and the ntfy topic is unguessable but
+    low-value — none of it warrants the friction of forcing
+    `sudo usermod -aG eth-validator-stats $USER` + relogin. If you do
+    put a `beacon_auth_token` for a hosted provider in the file,
+    tighten to 0640 manually.
+  * Fix: postinst auto-upgrades existing config files that are still
+    at the old 0640 default to 0644 on `apt install`. Files at any
+    other mode (already 0644, or user-tightened) are left alone.
+  * Fix: uninstall no longer prints a stack of `dpkg: warning:
+    directory ... not empty so not removed` messages for venv dirs.
+    The bundled Python interpreter creates __pycache__/*.pyc at
+    runtime that dpkg doesn't own; postrm now `rm -rf /opt/<pkg>` on
+    `remove` so dpkg doesn't have to wrestle with leftover dirs.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 07:57:49 +0000
+
 eth-validator-stats (0.3.6-1) unstable; urgency=medium
 
   * Fix: `eth-validator-stats status` (and the other read-only

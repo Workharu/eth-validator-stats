@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.6
+Version:        0.3.7
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -165,6 +165,18 @@ chown -R eth-validator-stats:eth-validator-stats /etc/%{name} /var/lib/%{name}
 # /var/lib dir: 0750, only the service user touches state.
 chmod 0755 /etc/%{name}
 chmod 0750 /var/lib/%{name}
+
+# Upgrade-time: if /etc/<pkg>/config.yml was previously chmod 0640
+# (the default in <= 0.3.6), bump it to 0644 so non-group users
+# can read the config without sudo. Only touch the file if it has
+# the exact old default — leave any user-customized perms alone.
+if [ -f /etc/%{name}/config.yml ]; then
+    cur=$(stat -c '%a' /etc/%{name}/config.yml 2>/dev/null || echo "")
+    if [ "$cur" = "640" ]; then
+        chmod 0644 /etc/%{name}/config.yml
+    fi
+fi
+
 %systemd_post %{name}.service
 
 if [ $1 -eq 1 ] ; then
@@ -208,6 +220,19 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.7-1
+- Fix: `init --system` now writes /etc/<pkg>/config.yml with mode
+  0644 instead of 0640. Any user can run read-only commands against
+  a system install without sudo or group membership. If you do put
+  a `beacon_auth_token` for a hosted provider in the file, tighten
+  to 0640 manually.
+- Fix: %post auto-upgrades existing config files that are still at
+  the old 0640 default to 0644 on `dnf install`. Files at any other
+  mode are left alone.
+- Fix: %postun on full uninstall ($1 == 0) now `rm -rf /opt/<pkg>`
+  so leftover __pycache__/*.pyc files created by the bundled Python
+  interpreter at runtime don't keep the venv dirs around.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.6-1
 - Fix: `eth-validator-stats status` (and the other read-only
   subcommands) no longer crash with a PermissionError traceback when
