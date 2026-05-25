@@ -76,7 +76,8 @@ eth-validator-stats simulate slashed    # check that urgent pushes bypass DND
 ## Commands at a glance
 
 ```bash
-eth-validator-stats status                # snapshot table (one HTTP call to your node)
+eth-validator-stats status                # render the last snapshot from disk (read-only;
+                                          # add --refresh to also poll the beacon node first)
 eth-validator-stats watch                 # loop forever (what the systemd service runs)
 eth-validator-stats check --missed 3      # one-shot for cron — exits 2 if any alert fires
 
