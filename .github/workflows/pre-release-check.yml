@@ -5,6 +5,13 @@ on:
   push:
     branches: [main]
 
+# Least-privilege default for every job in this workflow — checks
+# only need to read the repo and run tests, not write back to it.
+# Override per-job if a future check needs more (e.g. uploading
+# coverage artifacts to the PR).
+permissions:
+  contents: read
+
 jobs:
   version-consistency:
     name: Version consistency
@@ -13,6 +20,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify all pinned version references agree
         run: ./scripts/bump.sh --verify
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          python-version: "3.11"
+      - run: uv sync
+      - run: uv run ruff check src/ tests/
 
   tests:
     name: Unit tests (py${{ matrix.python-version }})

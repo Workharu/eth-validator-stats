@@ -1,7 +1,12 @@
-# Linux service install (Phase 1)
+# Linux service install (from a git checkout)
 
 This directory installs `eth-validator-stats` as a systemd unit that runs the
 `watch` subcommand under the supervisor.
+
+> Most users should install the `.deb` / `.rpm` (see the top-level README), or
+> use `pipx install eth-validator-stats`. This directory is for installing
+> straight from a git checkout — useful for development, packaging
+> experiments, and tweaking the unit file in place.
 
 ## Prerequisites
 
@@ -35,9 +40,8 @@ sudo ./install-service.sh --system
 ```
 
 Writes the unit to `/etc/systemd/system/eth-validator-stats.service`, sets
-`User=$SUDO_USER` so it runs as the invoking user (not root). This path is
-mainly for users who want system-scope without waiting for Phase 2's distro
-packages.
+`User=$SUDO_USER` so it runs as the invoking user (not root). Suitable when
+you want a system-scope unit but don't want to install the distro package.
 
 ## Uninstall
 
@@ -47,12 +51,10 @@ packages.
 sudo ./uninstall-service.sh --system
 ```
 
-## Phase 2 hand-off
+## Migrating to the distro package
 
-Phase 2's `.deb` and `.rpm` packages will ship a similar unit at
-`/lib/systemd/system/eth-validator-stats.service` running as a dedicated
-`eth-validator-stats` system user. Users who installed via this script will
-need a one-time migration:
+If you installed via this script and now want to switch to the official
+`.deb` / `.rpm` package:
 
 ```bash
 systemctl --user disable --now eth-validator-stats.service
@@ -60,6 +62,7 @@ rm ~/.config/systemd/user/eth-validator-stats.service
 sudo apt install eth-validator-stats  # or dnf install
 ```
 
-Config remains compatible (the package will look in `/etc/eth-validator-stats/`
-by default but accepts the `ETH_VALIDATOR_STATS_CONFIG` env var to point at
-your existing `~/.config/eth-validator-stats/config.yml`).
+Your config keeps working — the package reads
+`/etc/eth-validator-stats/config.yml` by default but honors the
+`ETH_VALIDATOR_STATS_CONFIG` env var if you want to keep pointing at the
+existing `~/.config/eth-validator-stats/config.yml`.

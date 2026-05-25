@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from eth_validator_stats._simulate import (
     build_missed_attestation,
-    build_offline,
-    build_withdrawal,
-    build_proposing_soon,
-    build_proposed,
     build_missed_proposal,
+    build_offline,
+    build_proposed,
+    build_proposing_soon,
+    build_withdrawal,
 )
 
 
@@ -71,7 +71,9 @@ def test_build_missed_proposal_default_slot():
     assert body == "✗ no block produced at slot 12345"
 
 
-from eth_validator_stats._simulate import (
+# Re-imports below intentionally split out for readability — these
+# blocks deal with the *cli.cmd_simulate* path, not the alert builders.
+from eth_validator_stats._simulate import (  # noqa: E402
     EVENTS,
     build_blind,
     build_recovered,
@@ -111,11 +113,11 @@ def test_events_table_scopes_correct():
             assert scope == "global", f"{name} should be global-scoped"
 
 
-import argparse
-from pathlib import Path
+import argparse  # noqa: E402
+from pathlib import Path  # noqa: E402
 
-from eth_validator_stats.cli import cmd_simulate
-from eth_validator_stats.config_io import ConfigEntry
+from eth_validator_stats.cli import cmd_simulate  # noqa: E402
+from eth_validator_stats.config_io import ConfigEntry  # noqa: E402
 
 
 def _cfg_with(tmp_path: Path, monkeypatch, *, validators, ntfy_topic="https://ntfy.example/t", icon_url=None):
@@ -265,6 +267,7 @@ def test_simulate_end_to_end_via_main_hits_real_notifier(tmp_path, monkeypatch, 
     at the cli import site so the POST is captured without hitting ntfy.sh.
     """
     import httpx
+
     from eth_validator_stats import cli as cli_mod
     from eth_validator_stats.alerts import NtfyNotifier as RealNtfyNotifier
 
@@ -301,6 +304,7 @@ def _patch_e2e_notifier(monkeypatch, captured: list):
     but exposes the Icon header so icon-routing tests can assert on it.
     """
     import httpx
+
     from eth_validator_stats import cli as cli_mod
     from eth_validator_stats.alerts import NtfyNotifier as RealNtfyNotifier
 

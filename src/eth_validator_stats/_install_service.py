@@ -101,8 +101,8 @@ def install_service_system(run_as: str | None, force: bool) -> int:
         )
         return 1
 
-    import pwd
     import grp
+    import pwd
     import shlex
     try:
         pwent = pwd.getpwnam(username)

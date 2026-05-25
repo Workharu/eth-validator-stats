@@ -2,15 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from eth_validator_stats.beacon import ValidatorInfo
-from eth_validator_stats.onboarding.portscan import Found
 from eth_validator_stats.onboarding.wizard import WizardArgs, run_wizard
 
 
 def _bytes_after_run(cfg_path: Path) -> bytes:
-    from tests.conftest import FakeBeaconClient, FakeNotifier, FakePortscanResult, FakePrompts
+    from tests.conftest import FakeBeaconClient, FakeNotifier, FakePrompts
 
     prompts = FakePrompts(answers=[])
     beacon = FakeBeaconClient(validators=[

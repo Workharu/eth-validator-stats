@@ -11,7 +11,7 @@ for resolving the validator, building the notifier, and pushing the result.
 """
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 
 def _label_part(label: str) -> str:

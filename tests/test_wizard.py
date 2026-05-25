@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
 from eth_validator_stats.beacon import ValidatorInfo
 from eth_validator_stats.config_io import load_config
 from eth_validator_stats.onboarding.portscan import Found

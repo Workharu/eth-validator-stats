@@ -104,12 +104,13 @@ def test_build_table_sorts_by_index_and_includes_rows():
 
 def test_poll_logs_proposer_duties_failure_at_warning(monkeypatch, caplog):
     import logging
+
     import httpx
 
     from eth_validator_stats import cli as cli_mod
+    from eth_validator_stats.alerts import AlertsConfig
     from eth_validator_stats.beacon import ChainInfo, Head, ValidatorInfo
     from eth_validator_stats.config_io import AppConfig, ConfigEntry
-    from eth_validator_stats.alerts import AlertsConfig
 
     cfg = AppConfig(
         beacon_node_url="http://fake",
@@ -146,6 +147,7 @@ def test_poll_logs_proposer_duties_failure_at_warning(monkeypatch, caplog):
 
 def test_configure_logging_applies_level_from_env(monkeypatch):
     import logging
+
     from eth_validator_stats.cli import configure_logging
 
     monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "DEBUG")
@@ -159,6 +161,7 @@ def test_configure_logging_applies_level_from_env(monkeypatch):
 
 def test_configure_logging_explicit_arg_wins_over_env(monkeypatch):
     import logging
+
     from eth_validator_stats.cli import configure_logging
 
     monkeypatch.setenv("ETH_VALIDATOR_STATS_LOG_LEVEL", "DEBUG")
@@ -169,7 +172,9 @@ def test_configure_logging_explicit_arg_wins_over_env(monkeypatch):
 def test_version_flag_prints_version_and_exits_zero(capsys):
     """`eth-validator-stats --version` prints `<prog> <semver>` and exits 0."""
     import re
+
     import pytest
+
     from eth_validator_stats.cli import main
 
     with pytest.raises(SystemExit) as exc:

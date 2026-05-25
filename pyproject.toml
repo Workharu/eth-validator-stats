@@ -21,6 +21,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: System :: Monitoring",
     "Topic :: Internet",
 ]
@@ -40,7 +41,27 @@ Issues = "https://github.com/Workharu/eth-validator-stats/issues"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+# E,F = pyflakes + style; I = isort; UP = pyupgrade; B = likely bugs; W = warnings
+select = ["E", "F", "I", "UP", "B", "W"]
+# Long lines in docstrings/error-message strings aren't worth a CI failure.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # tests use plain `assert`
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--cov=eth_validator_stats --cov-report=term-missing:skip-covered"
 
 [project.scripts]
 eth-validator-stats = "eth_validator_stats.cli:main"
@@ -50,7 +71,3 @@ evs = "eth_validator_stats.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/eth_validator_stats"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]

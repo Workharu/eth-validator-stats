@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from eth_validator_stats import _install_service as svc
 
 
@@ -69,7 +67,8 @@ def test_resolve_binary_path_returns_resolved_argv0(tmp_path: Path, monkeypatch)
 
 def _stub_pwd_grp(monkeypatch, username: str = "alice", uid: int = 1001, gid: int = 1001, group: str = "alice"):
     """Stub pwd.getpwnam(username) and grp.getgrgid(gid) for tests."""
-    import pwd, grp
+    import grp
+    import pwd
 
     class _Pw:
         pw_name = username

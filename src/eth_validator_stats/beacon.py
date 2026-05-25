@@ -56,7 +56,7 @@ class BeaconClient:
     def close(self) -> None:
         self._client.close()
 
-    def __enter__(self) -> "BeaconClient":
+    def __enter__(self) -> BeaconClient:
         return self
 
     def __exit__(self, *_: object) -> None:

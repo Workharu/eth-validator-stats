@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pytest
 import yaml
 
 from eth_validator_stats import _validators_cmd as vmod

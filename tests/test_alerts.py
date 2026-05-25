@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import json
-
 import httpx
 import pytest
 
 from eth_validator_stats.alerts import (
-    AlertsConfig,
     BLIND_KEY,
+    AlertsConfig,
     NtfyNotifier,
     clear_blind_if_recovered,
     make_notifier,
@@ -539,7 +537,9 @@ def test_prune_handles_validator_without_scheduled_proposals():
 
 def test_ntfy_failure_is_logged_at_warning(caplog):
     import logging
+
     import httpx
+
     from eth_validator_stats.alerts import NtfyNotifier
 
     def failing_handler(request: httpx.Request) -> httpx.Response:

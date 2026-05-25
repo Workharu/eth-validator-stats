@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 import httpx
-import pytest
 
-from eth_validator_stats.onboarding.portscan import Found, scan
+from eth_validator_stats.onboarding.portscan import scan
 
 
 def _make_handler(port_to_response: dict[int, httpx.Response]):

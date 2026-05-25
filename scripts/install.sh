@@ -15,6 +15,18 @@
 #
 # Safe to re-run: apt/dnf treat the install as an upgrade if a newer
 # version is already there; pipx is forced to overwrite.
+#
+# Trust model:
+#   This script downloads release artifacts directly from
+#   github.com/Workharu/eth-validator-stats over HTTPS — no third-party
+#   binary mirror, no key bundled in the script. Curling | bash from
+#   master means you trust:
+#     (a) the GitHub TLS chain,
+#     (b) that no one has pushed a tampered release to the repo since
+#         you last looked.
+#   If that's not enough, see the README for the manual install path
+#   (download → checksum-verify → install) or use pipx, which fetches
+#   from PyPI's signed index.
 
 set -euo pipefail
 
@@ -89,24 +101,33 @@ trap 'rm -rf "$TMP"' EXIT
 info "fetching latest release metadata"
 JSON=$(curl -fsSL "$API")
 
-# Parse fields out of the JSON without jq (which we don't require).
-TAG=$(printf '%s' "$JSON" \
-      | grep -oE '"tag_name":[[:space:]]*"[^"]+"' \
-      | head -1 \
-      | sed -E 's/.*"([^"]+)".*/\1/')
-[ -n "$TAG" ] || err "could not read tag_name from $API"
-info "latest release: $TAG"
-
+# Parse fields out of the JSON. Prefer jq when present (cleaner +
+# correct for any future quoted-name edge cases); fall back to the
+# regex parser so the one-liner still works on minimal hosts.
 case "$FLAVOR" in
     deb) ASSET_RE="eth-validator-stats_[^\"]+_${ARCH_DEB}\\.deb" ;;
     rpm) ASSET_RE="eth-validator-stats-[^\"]+\\.${ARCH_RPM}\\.rpm" ;;
 esac
 
-URL=$(printf '%s' "$JSON" \
-      | grep -oE '"browser_download_url":[[:space:]]*"[^"]+"' \
-      | sed -E 's/.*"([^"]+)".*/\1/' \
-      | grep -E "$ASSET_RE" \
-      | head -1)
+if command -v jq >/dev/null 2>&1; then
+    TAG=$(printf '%s' "$JSON" | jq -r .tag_name)
+    URL=$(printf '%s' "$JSON" \
+          | jq -r '.assets[].browser_download_url' \
+          | grep -E "$ASSET_RE" \
+          | head -1)
+else
+    TAG=$(printf '%s' "$JSON" \
+          | grep -oE '"tag_name":[[:space:]]*"[^"]+"' \
+          | head -1 \
+          | sed -E 's/.*"([^"]+)".*/\1/')
+    URL=$(printf '%s' "$JSON" \
+          | grep -oE '"browser_download_url":[[:space:]]*"[^"]+"' \
+          | sed -E 's/.*"([^"]+)".*/\1/' \
+          | grep -E "$ASSET_RE" \
+          | head -1)
+fi
+[ -n "$TAG" ] || err "could not read tag_name from $API"
+info "latest release: $TAG"
 [ -n "$URL" ] || err "no $FLAVOR asset matching ${ARCH_DEB}${ARCH_RPM} found in release $TAG. The asset may not have built; see https://github.com/${REPO}/releases/$TAG"
 
 PKG="$TMP/$(basename "$URL")"
