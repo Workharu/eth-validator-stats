@@ -24,6 +24,7 @@ def test_config_path_env_override_wins(monkeypatch, tmp_path: Path):
 def test_state_path_uses_xdg_data_home_via_platformdirs(monkeypatch, tmp_path: Path):
     monkeypatch.delenv("ETH_VALIDATOR_STATS_STATE", raising=False)
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    monkeypatch.setattr("eth_validator_stats.cli.SYSTEM_STATE_DIR", tmp_path / "does_not_exist")
     assert state_path() == tmp_path / "eth-validator-stats" / "state.json"
 
 
