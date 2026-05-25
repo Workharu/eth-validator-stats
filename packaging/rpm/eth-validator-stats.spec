@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.3.11
+Version:        0.3.12
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -230,6 +230,22 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.12-1
+- New: `eth-validator-stats validators add|list|rm` subcommand group.
+  Adds, lists, and removes validators from config.yml without
+  editing YAML. `add` verifies the validator on the beacon node;
+  `list --status` shows live status + balance; `rm` accepts index,
+  pubkey, or label. All three preserve the config file's mode and
+  ownership and restart the systemd service afterwards.
+- UX: `init` parting message now points at `validators add` instead
+  of telling users to hand-edit config.yml. Surfaces the `evs`
+  short alias on the same screen.
+- Fix: `init` was silently accepting an empty bearer token when the
+  user answered "yes" to "Does this node need auth?" Now re-prompts.
+- Internal: code-review pass fixed three pubkey-only edge cases in
+  the new validators module (`list --status`, `add --no-verify`
+  echo, `rm` confirmation text).
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.3.11-1
 - New: one-liner installer at scripts/install.sh that handles .deb,
   .rpm, and pipx fallback from a single curl-pipe-to-bash command.

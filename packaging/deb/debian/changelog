@@ -1,3 +1,35 @@
+eth-validator-stats (0.3.12-1) unstable; urgency=medium
+
+  * New: `eth-validator-stats validators add|list|rm` subcommand group.
+    Adds, lists, and removes validators from the config without
+    editing YAML by hand. `add` verifies the validator exists on the
+    beacon node before saving (or pass --no-verify to skip). `list`
+    has a --status flag that hits the beacon for live state +
+    balance per validator. `rm` accepts an index, pubkey, or label
+    and prompts for confirmation (unless --yes). All three preserve
+    the existing file's mode + ownership (important on system installs
+    where /etc/<pkg>/config.yml is 0644 owned by the service user)
+    and trigger a systemd restart so the service picks up the new
+    list immediately. The README's "Adding / removing validators
+    after init" section walks through it.
+  * UX: `init` wizard's parting "next steps" hint now points at
+    `validators add` instead of telling users to hand-edit
+    config.yml. Also surfaces the `evs` short alias on the same
+    screen so users discover it right when they're about to type
+    their first command.
+  * Fix: `init` was previously silently accepting an empty bearer
+    token when the user answered "yes" to "Does this node need auth?"
+    Now re-prompts (or asks them to confirm they meant no after all).
+  * Internal: pre-release code-review pass on the new validators
+    module fixed three pubkey-only edge cases: `list --status` for a
+    pubkey-only entry now resolves live data via the pubkey (was
+    showing "—"); `add --no-verify` for a pubkey input now echoes
+    the shortened pubkey on success (was showing "?"); `rm` for a
+    pubkey-only victim now prints the shortened pubkey in the
+    confirmation prompt (was showing "index None").
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 17:45:36 +0000
+
 eth-validator-stats (0.3.11-1) unstable; urgency=medium
 
   * New: one-liner installer at scripts/install.sh. Auto-detects OS
