@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.4.0
+Version:        0.5.0
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -231,6 +231,27 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.5.0-1
+- `evs status` is now read-only by default. It renders the on-disk
+  snapshot instead of polling the beacon node, eliminating the race
+  with the `watch` service. Use `evs status --refresh` for the old
+  poll-and-save behavior.
+- State file is auto-shared across callers when a system install is
+  present. `evs status`, `sudo evs status`, and the `watch` service
+  all read/write `/var/lib/eth-validator-stats/state.json` when that
+  directory exists. Falls back to per-user platformdirs path on pipx
+  / `--user` installs.
+- `evs status` shows a "last updated: 2m ago" footer so a dead watch
+  service is obvious at a glance. First-run prints an onboarding hint
+  instead of an empty table.
+- Liveness for the monitor itself. `alerts.daily_heartbeat` sends one
+  low-priority `MONITOR ALIVE` push per day; the signal is the absence.
+  `alerts.heartbeat_url` POSTs a zero-byte heartbeat after every poll,
+  compatible with healthchecks.io, Better Stack, Cronitor, uptime-kuma.
+- CLI internals migrated from argparse to typer. All command names,
+  flags, and exit codes preserved. Help output is now Rich-styled.
+  `--log-level` is case-insensitive but still rejects invalid values.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.4.0-1
 - Breaking: legacy TOML config support removed. The CLI now reads
   YAML only (.yml / .yaml). The --migrate flag is gone. Every

@@ -9,6 +9,8 @@ For the Debian-format release notes (used by the `.deb` package), see
 [`packaging/deb/debian/changelog`](packaging/deb/debian/changelog).
 
 ## [Unreleased]
+
+## [0.5.0] - 2026-05-25
 ### Added
 - **Liveness for the monitor itself** so a dead `eth-validator-stats` doesn't go unnoticed.
   - `alerts.daily_heartbeat` (default `false`, auto-enabled by `init` when ntfy is configured) sends one low-priority `MONITOR ALIVE` push per day at `alerts.daily_heartbeat_hour` (default 9 local). The signal is the absence: if your morning ping doesn't show up, you investigate.

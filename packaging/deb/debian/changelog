@@ -1,3 +1,31 @@
+eth-validator-stats (0.5.0-1) unstable; urgency=medium
+
+  * `evs status` is now read-only by default. It renders the on-disk
+    snapshot instead of polling the beacon node, eliminating the race
+    with the `watch` service. Use `evs status --refresh` for the old
+    poll-and-save behavior. Cron users were already supposed to use
+    `evs check`; if you cron'd `evs status`, switch to that.
+  * State file is auto-shared across callers when a system install is
+    present. `evs status`, `sudo evs status`, and the `watch` service
+    all now read/write `/var/lib/eth-validator-stats/state.json` when
+    that directory exists, so the three views no longer diverge. Falls
+    back to the per-user platformdirs path on pipx / `--user` installs.
+  * `evs status` shows a "last updated: 2m ago" footer so a dead watch
+    service is obvious at a glance. First-run (no state on disk) prints
+    an onboarding hint instead of an empty table.
+  * Liveness for the monitor itself. New `alerts.daily_heartbeat` sends
+    one low-priority `MONITOR ALIVE` push per day at
+    `alerts.daily_heartbeat_hour`; the signal is the absence. New
+    `alerts.heartbeat_url` POSTs a zero-byte heartbeat after every
+    successful poll, compatible with healthchecks.io, Better Stack,
+    Cronitor, uptime-kuma, etc.
+  * CLI internals migrated from argparse to typer. All command names,
+    flags, and exit codes preserved. Help output is now Rich-styled
+    (colored panels). `--log-level` is case-insensitive but still
+    rejects invalid values.
+
+ -- privatejava <privatejava@yahoo.com>  Mon, 25 May 2026 20:52:20 +0000
+
 eth-validator-stats (0.4.0-1) unstable; urgency=medium
 
   * Breaking: legacy TOML config support removed. The CLI now reads
