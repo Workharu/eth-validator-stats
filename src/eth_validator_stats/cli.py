@@ -198,6 +198,7 @@ def poll(cfg: AppConfig, state: dict) -> list[DisplayRow]:
                 liveness=[(int(e), int(a)) for e, a in buffer],
             )
         )
+    state["last_poll_ts"] = int(time.time())
     return rows
 
 

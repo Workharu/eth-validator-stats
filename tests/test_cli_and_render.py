@@ -215,3 +215,33 @@ def test_version_flag_prints_version_and_exits_zero(capsys):
     assert out.startswith("eth-validator-stats ")
     # Version may be a semver like "0.3.5" or the "unknown" fallback.
     assert re.search(r"(\d+\.\d+\.\d+|unknown)", out)
+
+
+def test_poll_records_last_poll_ts(monkeypatch):
+    """poll() must stamp state['last_poll_ts'] so status can show staleness."""
+    import time as _time
+    from eth_validator_stats.cli import poll
+    from eth_validator_stats.config_io import AppConfig
+
+    # Freeze time
+    monkeypatch.setattr(_time, "time", lambda: 1_700_000_000.0)
+
+    # Stub BeaconClient so we don't hit the network.
+    class _StubClient:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def get_chain_info(self):
+            from eth_validator_stats.beacon import ChainInfo
+            return ChainInfo(genesis_time=0, seconds_per_slot=12, slots_per_epoch=32)
+        def get_head(self):
+            class H: slot = 100
+            return H()
+        def get_validators(self, ids): return []
+        def get_liveness(self, epoch, indices): return {}
+
+    monkeypatch.setattr("eth_validator_stats.cli.BeaconClient", lambda *a, **kw: _StubClient())
+
+    cfg = AppConfig(beacon_node_url="http://x", beacon_auth_token=None, validators=[], alerts=None)
+    state: dict = {}
+    poll(cfg, state)
+    assert state["last_poll_ts"] == 1_700_000_000
