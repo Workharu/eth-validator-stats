@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 For the Debian-format release notes (used by the `.deb` package), see
 [`packaging/deb/debian/changelog`](packaging/deb/debian/changelog).
 
+## [Unreleased]
+### Added
+- **Liveness for the monitor itself** so a dead `eth-validator-stats` doesn't go unnoticed.
+  - `alerts.daily_heartbeat` (default `false`, auto-enabled by `init` when ntfy is configured) sends one low-priority `MONITOR ALIVE` push per day at `alerts.daily_heartbeat_hour` (default 9 local). The signal is the absence: if your morning ping doesn't show up, you investigate.
+  - `alerts.heartbeat_url` POSTs a zero-byte heartbeat after every successful poll. Compatible with healthchecks.io, Better Stack, Cronitor, self-hosted uptime-kuma, or any URL that accepts an unauthenticated POST. We recommend healthchecks.io — free, GitHub-login signup, built-in ntfy integration so alerts route to your existing topic. Setup is documented in [`docs/USAGE.md`](docs/USAGE.md#monitoring-the-monitor).
+  - Failures of `heartbeat_url` POSTs are logged at WARNING and never crash the watch loop — best-effort by design.
+
 ## [0.4.0] - 2026-05-25
 ### Removed
 - **Breaking:** legacy TOML config support. The CLI now reads YAML only (`.yml` / `.yaml`). The `--migrate` flag, the interactive "found legacy TOML" prompt on `init`, the `legacy_toml_path` helper, and the `tomllib` import are all gone. Every release since 0.2.0 has shipped YAML as the canonical format, so this should affect no real-world installs. Anything with a `.toml` suffix is now rejected with `unsupported config suffix`.

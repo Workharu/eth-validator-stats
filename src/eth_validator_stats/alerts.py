@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 import httpx
@@ -33,6 +34,18 @@ class AlertsConfig:
     # points at the icon shipped in this repo, served via raw.githubusercontent.
     # Set to "" to suppress; set to your own URL to brand pushes differently.
     icon_url: str = DEFAULT_NTFY_ICON_URL
+    # Liveness / dead-man's-switch for the monitor itself. Two layers:
+    #   1. daily_heartbeat — send a low-priority "MONITOR ALIVE" ntfy at
+    #      the configured local hour each day. If the operator stops
+    #      seeing their morning ping, they know to investigate.
+    #   2. heartbeat_url — every successful poll POSTs to this URL.
+    #      Compatible with healthchecks.io, Better Stack, Cronitor, or
+    #      any other watchdog service that accepts an unauthenticated
+    #      POST. Empty disables. Layered atop the daily push for users
+    #      who want sub-5-minute detection latency.
+    daily_heartbeat: bool = False
+    daily_heartbeat_hour: int = 9  # local time, 0-23
+    heartbeat_url: str = ""
 
 
 class Notifier(Protocol):
@@ -96,6 +109,56 @@ def make_notifier(cfg: AlertsConfig) -> Notifier:
 
 
 BLIND_KEY = "blind_alerted_until_ts"
+DAILY_HEARTBEAT_KEY = "last_daily_heartbeat_date"
+
+
+def send_daily_heartbeat(
+    state: dict,
+    notifier: Notifier,
+    cfg: AlertsConfig,
+    rows_summary: str,
+    *,
+    now_local: datetime | None = None,
+) -> bool:
+    """Send one "MONITOR ALIVE" ntfy per day, the moment local time crosses
+    cfg.daily_heartbeat_hour.
+
+    The point of this push is the *absence* of it: if the operator doesn't
+    get their morning ping, they know to investigate. So the message body
+    is intentionally low-content — a one-line summary is enough.
+
+    Dedup: stores the date string (local TZ) in state[DAILY_HEARTBEAT_KEY].
+    Re-running watch on the same day is a no-op. Returns True if a push
+    was sent (mostly for tests).
+    """
+    if not cfg.daily_heartbeat:
+        return False
+    now = now_local if now_local is not None else datetime.now()
+    if now.hour < cfg.daily_heartbeat_hour:
+        return False
+    today = now.strftime("%Y-%m-%d")
+    if state.get(DAILY_HEARTBEAT_KEY) == today:
+        return False
+    notifier.send("MONITOR ALIVE", rows_summary)
+    state[DAILY_HEARTBEAT_KEY] = today
+    return True
+
+
+def post_heartbeat_url(cfg: AlertsConfig, *, transport: httpx.BaseTransport | None = None) -> None:
+    """POST a zero-byte heartbeat to cfg.heartbeat_url.
+
+    Compatible with healthchecks.io's /ping/<uuid> pattern, Better Stack,
+    Cronitor, or any service that accepts an unauthenticated POST.
+    Failures are logged at WARNING and never raised — this is best-effort
+    by design, the actual alerting happens on the watchdog service side.
+    """
+    if not cfg.heartbeat_url:
+        return
+    try:
+        with httpx.Client(timeout=cfg.request_timeout_s, transport=transport) as c:
+            c.post(cfg.heartbeat_url, content=b"")
+    except Exception as e:
+        logger.warning("heartbeat POST to %s failed: %s", cfg.heartbeat_url, e)
 
 
 # Status families per the Beacon API validator status enum:

@@ -220,6 +220,7 @@ def test_version_flag_prints_version_and_exits_zero(capsys):
 def test_poll_records_last_poll_ts(monkeypatch):
     """poll() must stamp state['last_poll_ts'] so status can show staleness."""
     import time as _time
+
     from eth_validator_stats.cli import poll
     from eth_validator_stats.config_io import AppConfig
 
@@ -252,6 +253,7 @@ def test_cmd_status_is_read_only_by_default(monkeypatch, tmp_path):
     """`evs status` must not hit the beacon node or write state.
     It renders whatever the watcher / cron has already produced."""
     import json
+
     from eth_validator_stats import cli as cli_mod
 
     state_file = tmp_path / "state.json"
@@ -291,6 +293,7 @@ def test_cmd_status_is_read_only_by_default(monkeypatch, tmp_path):
 def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
     """`evs status --refresh` opts back into the old behavior."""
     import json
+
     from eth_validator_stats import cli as cli_mod
 
     state_file = tmp_path / "state.json"
@@ -317,7 +320,9 @@ def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
 def test_cmd_status_prints_staleness_footer(monkeypatch, tmp_path, capsys):
     """When state has a last_poll_ts, status prints a 'last updated' line
     so the user can spot a dead watcher."""
-    import json, time as _time
+    import json
+    import time as _time
+
     from eth_validator_stats import cli as cli_mod
 
     state_file = tmp_path / "state.json"
@@ -331,7 +336,9 @@ def test_cmd_status_prints_staleness_footer(monkeypatch, tmp_path, capsys):
     # Freeze "now" 125 seconds after the last poll.
     monkeypatch.setattr(_time, "time", lambda: 1_700_000_125.0)
 
-    class _Cfg: validators = []
+    class _Cfg:
+        validators = []
+
     monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
 
     import argparse
@@ -351,7 +358,9 @@ def test_cmd_status_prints_hint_when_state_is_empty(monkeypatch, tmp_path, capsy
     # No state file at all on disk.
     monkeypatch.setenv("ETH_VALIDATOR_STATS_STATE", str(tmp_path / "missing.json"))
 
-    class _Cfg: validators = []
+    class _Cfg:
+        validators = []
+
     monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
 
     import argparse

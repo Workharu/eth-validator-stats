@@ -29,6 +29,7 @@ from .alerts import (
     NtfyNotifier,
     clear_blind_if_recovered,
     make_notifier,
+    post_heartbeat_url,
     process_blind,
     process_lifecycle_alerts,
     process_proposal_outcomes,
@@ -37,6 +38,7 @@ from .alerts import (
     process_withdrawals,
     prune_scheduled_proposals,
     record_scheduled_proposals,
+    send_daily_heartbeat,
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
 from .config_io import AppConfig, ConfigEntry, load_config
@@ -442,6 +444,18 @@ def run_check_once(args: argparse.Namespace) -> int:
         except (httpx.HTTPError, OSError) as e:
             logger.warning("proposal outcome verification failed: %s", e)
         prune_scheduled_proposals(state, current_slot)
+
+    # Liveness layer: daily "monitor alive" push at the configured local
+    # hour, and (if configured) a POST to a third-party heartbeat URL.
+    # Both no-op when not enabled.
+    n_active = sum(1 for r in rows if r.status == "active_ongoing")
+    send_daily_heartbeat(
+        state,
+        notifier,
+        cfg.alerts,
+        rows_summary=f"{len(rows)} validators tracked, {n_active} active_ongoing",
+    )
+    post_heartbeat_url(cfg.alerts)
 
     save_state(state_path(), state)
 

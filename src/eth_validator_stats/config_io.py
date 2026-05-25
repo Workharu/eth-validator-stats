@@ -153,6 +153,9 @@ def write_config(
         "withdrawal_max_gap_slots": cfg.alerts.withdrawal_max_gap_slots,
         "proposal_lookahead_epochs": cfg.alerts.proposal_lookahead_epochs,
         "icon_url": cfg.alerts.icon_url,
+        "daily_heartbeat": cfg.alerts.daily_heartbeat,
+        "daily_heartbeat_hour": cfg.alerts.daily_heartbeat_hour,
+        "heartbeat_url": cfg.alerts.heartbeat_url,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -246,6 +249,11 @@ def _parse_config(raw: dict) -> AppConfig:
     # (DEFAULT_NTFY_ICON_URL). Explicit empty string disables the icon.
     from .alerts import DEFAULT_NTFY_ICON_URL
     icon_url_raw = alerts_raw.get("icon_url", DEFAULT_NTFY_ICON_URL)
+    hb_hour = int(alerts_raw.get("daily_heartbeat_hour", 9))
+    if not 0 <= hb_hour <= 23:
+        raise SystemExit(
+            f"alerts.daily_heartbeat_hour must be 0-23 (got {hb_hour})"
+        )
     alerts = AlertsConfig(
         ntfy_topic=str(alerts_raw.get("ntfy_topic", "") or ""),
         cooldown_minutes=int(alerts_raw.get("cooldown_minutes", 30)),
@@ -255,6 +263,9 @@ def _parse_config(raw: dict) -> AppConfig:
         withdrawal_max_gap_slots=int(alerts_raw.get("withdrawal_max_gap_slots", 64)),
         proposal_lookahead_epochs=int(alerts_raw.get("proposal_lookahead_epochs", 1)),
         icon_url=str(icon_url_raw if icon_url_raw is not None else ""),
+        daily_heartbeat=bool(alerts_raw.get("daily_heartbeat", False)),
+        daily_heartbeat_hour=hb_hour,
+        heartbeat_url=str(alerts_raw.get("heartbeat_url", "") or ""),
     )
     return AppConfig(
         beacon_node_url=url,

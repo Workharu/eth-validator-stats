@@ -67,7 +67,15 @@ Every alert is one ntfy push, deduplicated per-validator with a configurable coo
 | `EXITED` | `active_exiting` → `exited_unslashed` | Normal |
 | `WITHDRAWAL READY` | exited → `withdrawal_possible` (funds claimable) | Normal |
 
-Verify any of these without waiting for a real event:
+**Liveness of the monitor itself** — so a dead monitor doesn't go unnoticed:
+
+| Push | When |
+|---|---|
+| `MONITOR ALIVE` | Once a day at the configured hour (default 9 AM). Absence is the signal — if your morning ping doesn't show, the monitor is down. |
+
+Want sub-5-minute detection? Set `alerts.heartbeat_url` to a [healthchecks.io](https://healthchecks.io/) ping URL (free, 1-click GitHub login) and they'll notify your ntfy if our process goes silent.
+
+Verify any push without waiting for a real event:
 
 ```bash
 eth-validator-stats simulate slashed    # check that urgent pushes bypass DND
