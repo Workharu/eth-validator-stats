@@ -275,7 +275,10 @@ def test_cmd_status_is_read_only_by_default(monkeypatch, tmp_path):
     save_called = {"v": False}
     monkeypatch.setattr(cli_mod, "poll", lambda cfg, s: poll_called.__setitem__("v", True) or [])
     monkeypatch.setattr(cli_mod, "save_state", lambda p, s: save_called.__setitem__("v", True))
-    monkeypatch.setattr(cli_mod, "load_config", lambda: object())
+
+    class _Cfg:
+        validators = []
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
 
     import argparse
     args = argparse.Namespace(refresh=False)
@@ -298,7 +301,10 @@ def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
     save_called = {"v": False}
     monkeypatch.setattr(cli_mod, "poll", lambda cfg, s: poll_called.__setitem__("v", True) or [])
     monkeypatch.setattr(cli_mod, "save_state", lambda p, s: save_called.__setitem__("v", True))
-    monkeypatch.setattr(cli_mod, "load_config", lambda: object())
+
+    class _Cfg:
+        validators = []
+    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
 
     import argparse
     args = argparse.Namespace(refresh=True)

@@ -317,7 +317,7 @@ def _rows_from_state(cfg: AppConfig, state: dict) -> list[DisplayRow]:
     `watch` service or writes a stale snapshot back over fresher data."""
     vstate = state.get("validators", {})
     rows: list[DisplayRow] = []
-    for entry in getattr(cfg, "validators", []):
+    for entry in cfg.validators:
         record: dict | None = None
         # Match by pubkey first (canonical), index second (legacy entries).
         if entry.pubkey is not None:
