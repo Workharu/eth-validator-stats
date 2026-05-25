@@ -331,6 +331,31 @@ def cmd_check(args: argparse.Namespace) -> int:
 def cmd_init(args: argparse.Namespace) -> int:
     from .config_io import config_path as _cfg_path, legacy_toml_path
 
+    # Auto-promote `sudo init` to `--system` when the system already
+    # expects to find a config at /etc (i.e. the eth-validator-stats
+    # service user exists, which means a .deb/.rpm/install-service has
+    # populated the system). Without this, running `sudo init` writes
+    # to /root/.config/... (because HOME=/root under sudo), which the
+    # systemd unit can never see — its ConditionPathExists guards
+    # against exactly that path. The escape hatch for the rare case
+    # where root really wants a per-user config is to set
+    # ETH_VALIDATOR_STATS_CONFIG explicitly.
+    if not args.system and os.geteuid() == 0:
+        import pwd
+        try:
+            pwd.getpwnam("eth-validator-stats")
+        except KeyError:
+            pass  # No service user → no system install → keep per-user default.
+        else:
+            if not os.environ.get("ETH_VALIDATOR_STATS_CONFIG"):
+                print(
+                    "note: running as root and the eth-validator-stats service "
+                    "user exists; writing the system config at "
+                    f"{SYSTEM_CONFIG_PATH} (use ETH_VALIDATOR_STATS_CONFIG=... "
+                    "for a custom location)."
+                )
+                args.system = True
+
     if args.system:
         if os.geteuid() != 0:
             print(
