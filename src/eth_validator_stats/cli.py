@@ -8,7 +8,9 @@ import sys
 import tempfile
 import time
 from enum import Enum as _Enum
+from enum import StrEnum as _StrEnum
 from pathlib import Path
+from typing import Annotated
 
 # Importing readline (when available) hooks GNU readline into every
 # subsequent built-in input() call in the process, enabling cursor
@@ -774,7 +776,7 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit()
 
 
-class _LogLevel(str, _Enum):
+class _LogLevel(_StrEnum):
     """Valid values for --log-level. Mirrors argparse's old `choices=[...]`."""
     DEBUG = "DEBUG"
     INFO = "INFO"
@@ -805,16 +807,23 @@ app = typer.Typer(
 @app.callback()
 def _root(
     ctx: typer.Context,
-    log_level: _LogLevel | None = typer.Option(
-        None, "--log-level",
-        help="Log level for stderr output (default: INFO; override via ETH_VALIDATOR_STATS_LOG_LEVEL).",
-        case_sensitive=False,
-    ),
-    version: bool = typer.Option(
-        False, "--version",
-        help="Print the installed package version and exit.",
-        callback=_version_callback, is_eager=True,
-    ),
+    log_level: Annotated[
+        _LogLevel | None,
+        typer.Option(
+            "--log-level",
+            help="Log level for stderr output (default: INFO; override via ETH_VALIDATOR_STATS_LOG_LEVEL).",
+            case_sensitive=False,
+        ),
+    ] = None,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            help="Print the installed package version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
 ) -> None:
     """Root callback: applies --log-level, handles --version eagerly."""
     configure_logging(log_level.value if log_level is not None else None)
@@ -922,13 +931,13 @@ def uninstall_service(
 
 @app.command()
 def simulate(
-    event: _SimEvent = typer.Argument(..., help="Which alert template to fire."),
-    validator: int | None = typer.Option(None, "--validator", help="Validator index to use (default: first configured)."),
-    last: int | None = typer.Option(None, "--last", help="missed-attestation: N consecutive misses (default 2)."),
-    status: str | None = typer.Option(None, "--status", help="offline: validator status string (default 'slashed')."),
-    amount_eth: float | None = typer.Option(None, "--amount-eth", help="withdrawal: ETH amount (default 0.001)."),
-    slot: int | None = typer.Option(None, "--slot", help="proposing-soon/proposed/missed-proposal: slot number (default 12345)."),
-    delay: str | None = typer.Option(None, "--delay", help="proposing-soon: human-readable delay (default '~6 min')."),
+    event: Annotated[_SimEvent, typer.Argument(help="Which alert template to fire.")],
+    validator: Annotated[int | None, typer.Option("--validator", help="Validator index to use (default: first configured).")] = None,
+    last: Annotated[int | None, typer.Option("--last", help="missed-attestation: N consecutive misses (default 2).")] = None,
+    status: Annotated[str | None, typer.Option("--status", help="offline: validator status string (default 'slashed').")] = None,
+    amount_eth: Annotated[float | None, typer.Option("--amount-eth", help="withdrawal: ETH amount (default 0.001).")] = None,
+    slot: Annotated[int | None, typer.Option("--slot", help="proposing-soon/proposed/missed-proposal: slot number (default 12345).")] = None,
+    delay: Annotated[str | None, typer.Option("--delay", help="proposing-soon: human-readable delay (default '~6 min').")] = None,
 ) -> None:
     """Send one test ntfy push matching a real alert template. State-free."""
     rc = cmd_simulate(argparse.Namespace(
