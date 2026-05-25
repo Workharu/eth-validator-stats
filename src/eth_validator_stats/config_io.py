@@ -120,8 +120,30 @@ def load_config(path: Path | None = None) -> AppConfig:
     return _parse_config(raw)
 
 
-def write_config(cfg: AppConfig, path: Path) -> None:
-    """Write a YAML config atomically with 0o600 permissions."""
+def write_config(
+    cfg: AppConfig,
+    path: Path,
+    *,
+    mode: int = 0o600,
+    uid: int | None = None,
+    gid: int | None = None,
+) -> None:
+    """Write a YAML config atomically.
+
+    Mode and ownership are applied to the tmp file BEFORE the atomic
+    rename, so the final file appears at the destination with the
+    intended perms in one step — no window where a concurrent reader
+    sees a transient 0600 file that the service user can't open. This
+    matters on system installs where /etc/<pkg>/config.yml is owned by
+    eth-validator-stats:eth-validator-stats with mode 0644.
+
+    `mode` defaults to 0o600 (the safe per-user default).
+    `uid`/`gid` are optional — if either is None, ownership is left
+    as whatever the current process produces (typically the invoking
+    user). If chown fails with PermissionError (non-root caller, or
+    target user doesn't exist), the chown is skipped silently — the
+    write still succeeds, just without ownership change.
+    """
     data: dict = {
         "beacon_node_url": cfg.beacon_node_url,
     }
@@ -149,8 +171,15 @@ def write_config(cfg: AppConfig, path: Path) -> None:
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(yaml.safe_dump(data, sort_keys=False))
-    os.chmod(tmp, 0o600)
+    tmp.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    os.chmod(tmp, mode)
+    if uid is not None and gid is not None:
+        try:
+            os.chown(tmp, uid, gid)
+        except (PermissionError, LookupError):
+            # Non-root caller writing under their own home — chown is a
+            # no-op anyway. Or target uid/gid doesn't exist on this host.
+            pass
     tmp.replace(path)
 
 

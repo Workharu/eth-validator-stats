@@ -1,4 +1,4 @@
-# eth-validator-stats
+# <img src="assets/icon.png" alt="" width="32" height="32" align="left"> eth-validator-stats
 
 [![CI](https://github.com/Workharu/eth-validator-stats/actions/workflows/pre-release-check.yml/badge.svg?branch=main)](https://github.com/Workharu/eth-validator-stats/actions/workflows/pre-release-check.yml)
 [![PyPI](https://img.shields.io/pypi/v/eth-validator-stats.svg)](https://pypi.org/project/eth-validator-stats/)
@@ -391,10 +391,9 @@ Liveness answers "the validator was seen in the epoch", which is what most users
 - No live TUI / dashboard. `watch` is a headless service-mode loop, not a re-rendered terminal UI.
 - No historical query command — `status` is current-slot, `check` is recent-buffer (~10 epochs). For long-range history you still want a block explorer or beaconcha.in.
 - No on-chain head/target attestation-correctness scoring (only "seen / not seen" per epoch via the liveness endpoint). On-chain correctness is a planned v2 feature.
-- ~~No `validators add/list/rm` CRUD command — edit `config.yml` directly.~~ Added in 0.3.12; see the [validators subcommand](#adding--removing-validators-after-init).
 - No Telegram / Discord / email transport — ntfy only. Telegram is the planned follow-up.
 
-See [docs/superpowers/plans/](docs/superpowers/plans/) and [docs/superpowers/specs/](docs/superpowers/specs/) for what's actively in flight.
+Open an issue or PR if any of these matter to you — happy to take patches.
 
 ## Tests
 

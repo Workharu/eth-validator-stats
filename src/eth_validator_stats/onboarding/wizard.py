@@ -71,6 +71,9 @@ def run_wizard(
     beacon_client_factory: BeaconFactory | None = None,
     notifier_factory: NotifierFactory | None = None,
     topic_generator: TopicGenerator | None = None,
+    write_mode: int = 0o600,
+    write_uid: int | None = None,
+    write_gid: int | None = None,
 ) -> int:
     io = io or StdIO()
     beacon_client_factory = beacon_client_factory or _default_beacon_factory
@@ -101,7 +104,11 @@ def run_wizard(
         beacon_auth_token=auth_token,
         alerts=AlertsConfig(ntfy_topic=ntfy_topic),
     )
-    write_config(cfg, cfg_path)
+    # Apply mode/uid/gid atomically on the tmp file before rename — see
+    # config_io.write_config's docstring for why this matters on system
+    # installs where the service user needs to read /etc/<pkg>/config.yml
+    # under mode 0644.
+    write_config(cfg, cfg_path, mode=write_mode, uid=write_uid, gid=write_gid)
 
     io.write(f"\n✓ Wrote {cfg_path}\n")
     io.write(

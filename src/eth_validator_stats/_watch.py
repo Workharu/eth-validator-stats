@@ -36,9 +36,16 @@ def watch_loop(
 def _install_signal_handlers(stop_event: threading.Event) -> None:
     """Map SIGTERM (systemd stop), SIGINT (Ctrl-C), and SIGBREAK (Windows
     Ctrl-Break, sent by WinSW) onto stop_event.set().
+
+    The handler must be async-signal-safe. The Python logging module
+    isn't (it can deadlock if a signal fires mid-flush inside a
+    handler's lock), so we only set the event in the handler and let
+    the main thread log the "received signal N" message when
+    watch_loop notices the event is set.
     """
     def handler(signum: int, frame) -> None:
-        logger.info("received signal %d, shutting down after current iteration", signum)
+        # Stash the signal number for the main thread to log on next wake.
+        stop_event.signum = signum  # type: ignore[attr-defined]
         stop_event.set()
 
     signal.signal(signal.SIGTERM, handler)
@@ -59,5 +66,10 @@ def cmd_watch(args: argparse.Namespace) -> int:
     interval = float(args.interval)
     logger.info("watch starting (interval=%.0fs)", interval)
     rc = watch_loop(lambda: run_check_once(args), interval_seconds=interval, stop_event=stop)
+    # Log the signal number now (out of signal-handler context) — see
+    # _install_signal_handlers docstring for why this is deferred.
+    signum = getattr(stop, "signum", None)
+    if signum is not None:
+        logger.info("received signal %d, shutdown complete", signum)
     logger.info("watch stopped")
     return rc

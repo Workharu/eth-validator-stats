@@ -36,11 +36,20 @@ def _build_args(**overrides):
     return argparse.Namespace(**defaults)
 
 
-def test_init_system_writes_to_etc_path(monkeypatch, tmp_path: Path):
+def test_init_system_passes_correct_write_perms_to_wizard(monkeypatch, tmp_path: Path):
+    """cmd_init's --system branch resolves the service user's uid/gid and
+    feeds them (along with mode 0o644) to run_wizard, which forwards to
+    write_config so perms apply atomically to the tmp file before the
+    rename. No more post-write chown/chmod that the old test was
+    asserting on.
+    """
     captured: dict = {}
 
-    def fake_run_wizard(wargs, *, cfg_path, **kwargs):
+    def fake_run_wizard(wargs, *, cfg_path, write_mode=None, write_uid=None, write_gid=None, **kwargs):
         captured["cfg_path"] = cfg_path
+        captured["write_mode"] = write_mode
+        captured["write_uid"] = write_uid
+        captured["write_gid"] = write_gid
         cfg_path.parent.mkdir(parents=True, exist_ok=True)
         cfg_path.write_text("beacon_node_url: http://localhost:3500\nvalidators: []\n")
         return 0
@@ -51,14 +60,12 @@ def test_init_system_writes_to_etc_path(monkeypatch, tmp_path: Path):
     import pwd
     monkeypatch.setattr(pwd, "getpwnam", lambda n: _fake_pwd_entry(n))
 
-    chown_calls: list = []
-    chmod_calls: list = []
-    import shutil
-    monkeypatch.setattr(shutil, "chown", lambda *a, **kw: chown_calls.append((a, kw)))
-    monkeypatch.setattr(os, "chmod", lambda *a, **kw: chmod_calls.append((a, kw)))
-
     system_cfg = tmp_path / "etc" / "eth-validator-stats" / "config.yml"
     monkeypatch.setattr(cli_mod, "SYSTEM_CONFIG_PATH", system_cfg, raising=True)
+
+    # _maybe_start_systemd_service is best-effort; short-circuit so the
+    # test doesn't shell out to systemctl on the CI host.
+    monkeypatch.setattr(cli_mod, "_maybe_start_systemd_service", lambda: None)
 
     args = _build_args(system=True)
     rc = cli_mod.cmd_init(args)
@@ -66,8 +73,11 @@ def test_init_system_writes_to_etc_path(monkeypatch, tmp_path: Path):
     assert rc == 0
     assert captured["cfg_path"] == system_cfg
     assert system_cfg.exists()
-    assert any(system_cfg in call[0] for call in chown_calls), chown_calls
-    assert any(system_cfg in call[0] for call in chmod_calls), chmod_calls
+    # --system writes at 0o644 owned by the eth-validator-stats service user.
+    assert captured["write_mode"] == 0o644
+    # _fake_pwd_entry stubs pw_uid = pw_gid = 999.
+    assert captured["write_uid"] == 999
+    assert captured["write_gid"] == 999
 
 
 def test_init_system_requires_root(monkeypatch, capsys):

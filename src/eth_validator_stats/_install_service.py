@@ -101,7 +101,9 @@ def install_service_system(run_as: str | None, force: bool) -> int:
         )
         return 1
 
-    import pwd, grp
+    import pwd
+    import grp
+    import shlex
     try:
         pwent = pwd.getpwnam(username)
     except KeyError:
@@ -109,11 +111,15 @@ def install_service_system(run_as: str | None, force: bool) -> int:
         return 1
     groupname = grp.getgrgid(pwent.pw_gid).gr_name
 
+    # Shell-quote bin_path so systemd parses ExecStart correctly even if
+    # the binary path ever contains spaces (e.g. pipx install into a
+    # path with spaces, exotic /opt layouts). Defensive — typical paths
+    # are space-free.
     unit_content = UNIT_TEMPLATE_SYSTEM.format(
-        user=username, group=groupname, bin=bin_path,
+        user=username, group=groupname, bin=shlex.quote(str(bin_path)),
     )
     SYSTEM_UNIT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SYSTEM_UNIT_PATH.write_text(unit_content)
+    SYSTEM_UNIT_PATH.write_text(unit_content, encoding="utf-8")
     os.chmod(SYSTEM_UNIT_PATH, 0o644)
 
     for d in (SYSTEM_CONFIG_DIR, SYSTEM_STATE_DIR):
@@ -179,11 +185,14 @@ def install_service_user(force: bool) -> int:
         )
         return 1
 
+    import shlex
     bin_path = _resolve_binary_path()
-    unit_content = UNIT_TEMPLATE_USER.format(bin=bin_path)
+    # Shell-quote in case the binary path contains spaces — same
+    # reasoning as the system-scope branch above.
+    unit_content = UNIT_TEMPLATE_USER.format(bin=shlex.quote(str(bin_path)))
 
     unit_dir.mkdir(parents=True, exist_ok=True)
-    unit_path.write_text(unit_content)
+    unit_path.write_text(unit_content, encoding="utf-8")
     os.chmod(unit_path, 0o644)
 
     username = os.environ.get("USER", "")

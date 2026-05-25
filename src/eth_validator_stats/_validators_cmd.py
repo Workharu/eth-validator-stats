@@ -17,7 +17,6 @@ write_config tightens to 0600 by default; we restore the original here.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
 
@@ -35,31 +34,25 @@ from .onboarding.prompts import parse_validator_input
 def _atomic_write_preserving_perms(cfg: AppConfig, path: Path) -> None:
     """Write the config back, preserving the existing file's mode/ownership.
 
-    write_config() always emits with mode 0600 — fine for a fresh per-user
-    config but wrong for /etc/<pkg>/config.yml, which init --system writes
-    at 0644 owned by eth-validator-stats:eth-validator-stats. Capture mode
-    + uid + gid before write, restore after.
+    Hands the captured mode + uid + gid to write_config, which applies
+    them to the tmp file BEFORE the atomic rename. No race window where
+    the file briefly appears at 0600 with root ownership and a concurrent
+    `status` / `check` from the service user fails to read it.
+
+    On a fresh per-user install where no prior file exists, falls back
+    to write_config's defaults (mode 0o600, current process owner).
     """
-    prev_mode: int | None = None
-    prev_uid: int | None = None
-    prev_gid: int | None = None
     if path.exists():
         st = path.stat()
-        prev_mode = st.st_mode & 0o777
-        prev_uid = st.st_uid
-        prev_gid = st.st_gid
-
-    write_config(cfg, path)
-
-    if prev_mode is not None:
-        os.chmod(path, prev_mode)
-    if prev_uid is not None and prev_gid is not None:
-        try:
-            os.chown(path, prev_uid, prev_gid)
-        except PermissionError:
-            # Non-root user editing their own ~/.config — chown is a no-op
-            # for them since they already own the file. Ignore.
-            pass
+        write_config(
+            cfg,
+            path,
+            mode=st.st_mode & 0o777,
+            uid=st.st_uid,
+            gid=st.st_gid,
+        )
+    else:
+        write_config(cfg, path)
 
 
 def _resolve_path_to_write() -> Path:

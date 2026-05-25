@@ -439,18 +439,34 @@ def cmd_init(args: argparse.Namespace) -> int:
         yes=args.yes,
         force=args.force,
     )
-    rc = run_wizard(w, cfg_path=cfg_path)
+
+    # Decide write perms BEFORE the wizard runs, so write_config applies
+    # them atomically (mode + ownership on the tmp file, then rename).
+    # No more post-write chmod/chown that briefly exposes a 0600 file.
+    #
+    # System install: 0644 (world-readable). Config contents are
+    # low-sensitivity — validator pubkeys/indices are public on chain,
+    # beacon URLs are local, ntfy topic is unguessable but low-value.
+    # If you put a beacon_auth_token for a hosted provider in here,
+    # tighten to 0640 manually.
+    write_mode = 0o600
+    write_uid: int | None = None
+    write_gid: int | None = None
+    if args.system:
+        import pwd as _pwd
+        write_mode = 0o644
+        ev = _pwd.getpwnam("eth-validator-stats")
+        write_uid, write_gid = ev.pw_uid, ev.pw_gid
+
+    rc = run_wizard(
+        w,
+        cfg_path=cfg_path,
+        write_mode=write_mode,
+        write_uid=write_uid,
+        write_gid=write_gid,
+    )
 
     if rc == 0 and args.system:
-        import shutil
-        shutil.chown(cfg_path, "eth-validator-stats", "eth-validator-stats")
-        # 0644 (world-readable) so any user can run `eth-validator-stats
-        # status` without joining the eth-validator-stats group. Config
-        # contents are low-sensitivity: validator pubkeys/indices are public
-        # on-chain anyway, beacon URLs are local, ntfy topic is unguessable
-        # but not high-value. If you do put a `beacon_auth_token` for a
-        # hosted provider in here, tighten to 0640 manually.
-        os.chmod(cfg_path, 0o644)
         _maybe_start_systemd_service()
 
     if rc == 0:
