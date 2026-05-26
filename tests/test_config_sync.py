@@ -77,3 +77,67 @@ def test_schema_keys_recurses_into_nested_dataclass():
 
     paths = [k.dotted_path for k in schema_keys(_Outer)]
     assert paths == ["inner.x", "inner.y", "top"]
+
+
+from pathlib import Path
+
+from eth_validator_stats.config_sync import find_missing_keys
+
+
+def _write(tmp_path: Path, body: str) -> Path:
+    p = tmp_path / "config.yml"
+    p.write_text(body, encoding="utf-8")
+    return p
+
+
+def test_find_missing_keys_fresh_config_returns_full_schema(tmp_path):
+    p = _write(
+        tmp_path,
+        "beacon_node_url: http://localhost:3500\nvalidators: []\n",
+    )
+    missing = find_missing_keys(p, schema_keys(AppConfig))
+    assert len(missing) == 13
+    assert "beacon_auth_token" in [k.dotted_path for k in missing]
+    assert "alerts.heartbeat_url" in [k.dotted_path for k in missing]
+
+
+def test_find_missing_keys_skips_parsed_values(tmp_path):
+    p = _write(
+        tmp_path,
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "alerts:\n"
+        "  heartbeat_url: https://hc-ping.com/abc\n",
+    )
+    missing = [k.dotted_path for k in find_missing_keys(p, schema_keys(AppConfig))]
+    assert "alerts.heartbeat_url" not in missing
+
+
+def test_find_missing_keys_skips_commented_values(tmp_path):
+    p = _write(
+        tmp_path,
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "# heartbeat_url: \"\"  # disabled for now\n",
+    )
+    missing = [k.dotted_path for k in find_missing_keys(p, schema_keys(AppConfig))]
+    assert "alerts.heartbeat_url" not in missing
+
+
+def test_find_missing_keys_known_false_positive_in_freetext(tmp_path):
+    # Acknowledged in the spec: unrelated comments containing a key name
+    # cause skip. Behavior is intentional.
+    p = _write(
+        tmp_path,
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "# Note: cooldown_minutes is discussed in README section 4.\n",
+    )
+    missing = [k.dotted_path for k in find_missing_keys(p, schema_keys(AppConfig))]
+    assert "alerts.cooldown_minutes" not in missing
+
+
+def test_find_missing_keys_empty_file(tmp_path):
+    p = _write(tmp_path, "")
+    missing = find_missing_keys(p, schema_keys(AppConfig))
+    assert len(missing) == 13

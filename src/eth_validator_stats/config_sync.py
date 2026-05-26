@@ -4,6 +4,7 @@ import dataclasses
 import logging
 import typing
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -112,4 +113,27 @@ def schema_keys(cls: type, _prefix: str = "") -> list[KeySpec]:
                 type_name=scalar.__name__,
             )
         )
+    return out
+
+
+def find_missing_keys(config_path: Path, keys: list[KeySpec]) -> list[KeySpec]:
+    """Return the subset of `keys` whose leaf name is not present anywhere
+    in the raw text of `config_path` (parsed values, comments, anywhere).
+
+    Leaf-name match is intentional: it gives us free idempotency against
+    blocks we previously appended, and treats commented-out values as
+    "user already knows about this".
+
+    If the file is unreadable, return an empty list — sync becomes a no-op.
+    """
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    out: list[KeySpec] = []
+    for k in keys:
+        leaf = k.dotted_path.rsplit(".", 1)[-1]
+        if leaf not in text:
+            out.append(k)
     return out
