@@ -46,7 +46,13 @@ from .alerts import (
     send_daily_heartbeat,
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
-from .config_io import AppConfig, ConfigEntry, load_config
+from .config_io import (
+    AppConfig,
+    ConfigEntry,
+    _resolve_existing_config,
+    load_config,
+)
+from .config_sync import sync_user_config
 from .onboarding import WizardArgs, run_wizard
 from .render import DisplayRow, build_table
 
@@ -56,6 +62,16 @@ LIVENESS_BUFFER_LEN = 10
 N_ATTS_DISPLAYED = 5
 SYSTEM_CONFIG_PATH = Path("/etc/eth-validator-stats/config.yml")
 SYSTEM_STATE_DIR = Path("/var/lib/eth-validator-stats")
+
+
+def load_config_with_sync() -> AppConfig:
+    """load_config() + best-effort schema sync. Never raises from sync."""
+    cfg = load_config()
+    try:
+        sync_user_config(_resolve_existing_config())
+    except Exception:  # noqa: BLE001 — defense in depth; sync_user_config is already no-raise
+        pass
+    return cfg
 
 
 def state_path() -> Path:
@@ -258,7 +274,7 @@ def _probe_endpoint(label: str, fn) -> tuple[str, str, str]:
 
 
 def cmd_info(args: argparse.Namespace) -> int:
-    cfg = load_config()
+    cfg = load_config_with_sync()
     console = Console()
 
     auth_repr = "Bearer (***)" if cfg.beacon_auth_token else "none"
@@ -371,7 +387,7 @@ def _format_staleness(last_poll_ts: int | None, now_ts: int) -> str | None:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    cfg = load_config()
+    cfg = load_config_with_sync()
     state = load_state(state_path())
     refresh = getattr(args, "refresh", False)
     console = Console()
@@ -405,7 +421,7 @@ def run_check_once(args: argparse.Namespace) -> int:
     `watch` command can call it in a loop. Behavior is identical to
     the pre-refactor `cmd_check`.
     """
-    cfg = load_config()
+    cfg = load_config_with_sync()
     state = load_state(state_path())
     notifier = make_notifier(cfg.alerts)
     now = int(time.time())
@@ -665,7 +681,7 @@ def cmd_simulate(args: argparse.Namespace, *, _notifier=None) -> int:
     kwarg is a test seam; production callers go through argparse which
     never sets it, so the real NtfyNotifier is constructed below.
     """
-    cfg = load_config()
+    cfg = load_config_with_sync()
 
     builder, scope = EVENTS[args.event]
 
