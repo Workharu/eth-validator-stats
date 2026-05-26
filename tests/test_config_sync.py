@@ -308,3 +308,76 @@ def test_append_preserves_mode_bits_on_bak(tmp_path):
     append_upgrade_block(p, "# appended\n")
     bak = p.with_suffix(p.suffix + ".bak")
     assert (bak.stat().st_mode & 0o777) == 0o600
+
+
+from eth_validator_stats.config_sync import sync_user_config
+
+
+def test_sync_user_config_appends_then_is_idempotent(tmp_path, monkeypatch):
+    # Pre-heartbeat-era config snapshot.
+    body = (
+        "beacon_node_url: http://localhost:3500\n"
+        "validators:\n"
+        "  - index: 1\n"
+        "    label: t\n"
+        "alerts:\n"
+        "  ntfy_topic: https://ntfy.sh/test\n"
+        "  cooldown_minutes: 30\n"
+        "  storm_threshold: 10\n"
+    )
+    p = _write(tmp_path, body)
+
+    result1 = sync_user_config(p)
+    assert result1.skipped_reason is None
+    assert "alerts.heartbeat_url" in result1.appended_keys
+    assert "alerts.daily_heartbeat" in result1.appended_keys
+
+    after_first = p.read_text(encoding="utf-8")
+    assert after_first.startswith(body)
+    assert "# === Added by eth-validator-stats" in after_first
+
+    # Idempotent: second run finds nothing missing, no further write.
+    result2 = sync_user_config(p)
+    assert result2.skipped_reason is None
+    assert result2.appended_keys == []
+    assert p.read_text(encoding="utf-8") == after_first
+
+
+def test_sync_user_config_disabled_via_env(tmp_path, monkeypatch):
+    p = _write(tmp_path, "beacon_node_url: http://localhost:3500\nvalidators: []\n")
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_NO_CONFIG_SYNC", "1")
+    result = sync_user_config(p)
+    assert result.skipped_reason == "disabled"
+    assert result.appended_keys == []
+    # No .bak either.
+    assert not p.with_suffix(p.suffix + ".bak").exists()
+
+
+def test_sync_user_config_no_config_returns_no_config(tmp_path):
+    p = tmp_path / "does-not-exist.yml"
+    result = sync_user_config(p)
+    assert result.skipped_reason == "no_config"
+    assert result.appended_keys == []
+
+
+def test_sync_user_config_after_sync_yaml_still_parses(tmp_path):
+    body = "beacon_node_url: http://localhost:3500\nvalidators: []\n"
+    p = _write(tmp_path, body)
+    sync_user_config(p)
+    parsed = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert parsed["beacon_node_url"] == "http://localhost:3500"
+    assert parsed["validators"] == []
+    # appended block is all comments, so no new top-level keys.
+    assert "beacon_auth_token" not in parsed
+    assert "alerts" not in parsed
+
+
+def test_sync_user_config_readonly_returns_not_writable(tmp_path):
+    p = _write(tmp_path, "beacon_node_url: http://localhost:3500\nvalidators: []\n")
+    os.chmod(p, stat_mod.S_IRUSR | stat_mod.S_IRGRP | stat_mod.S_IROTH)
+    try:
+        result = sync_user_config(p)
+        assert result.skipped_reason == "not_writable"
+        assert result.appended_keys == []
+    finally:
+        os.chmod(p, stat_mod.S_IRUSR | stat_mod.S_IWUSR)

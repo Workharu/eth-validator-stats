@@ -12,6 +12,9 @@ from typing import Any
 
 import yaml
 
+from . import __version__ as _PACKAGE_VERSION
+from .config_io import AppConfig
+
 logger = logging.getLogger(__name__)
 
 
@@ -265,3 +268,44 @@ def append_upgrade_block(path: Path, block: str) -> bool:
         return False
 
     return True
+
+
+def sync_user_config(path: Path) -> SyncResult:
+    """Top-level orchestrator. Never raises.
+
+    Detects schema-vs-file drift and appends missing keys as a commented
+    YAML block. Idempotent: subsequent runs find no drift and do nothing.
+    """
+    if os.environ.get("ETH_VALIDATOR_STATS_NO_CONFIG_SYNC") == "1":
+        return SyncResult(skipped_reason="disabled", appended_keys=[])
+
+    if not path.exists():
+        return SyncResult(skipped_reason="no_config", appended_keys=[])
+
+    if not os.access(path, os.W_OK):
+        # Check up-front so we report "not_writable" even when there's no drift.
+        # append_upgrade_block also checks, but only after find_missing_keys runs.
+        return SyncResult(skipped_reason="not_writable", appended_keys=[])
+
+    try:
+        keys = schema_keys(AppConfig)
+        missing = find_missing_keys(path, keys)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("config sync introspection on %s failed: %s", path, exc)
+        return SyncResult(skipped_reason="io_error", appended_keys=[])
+
+    if not missing:
+        return SyncResult(skipped_reason=None, appended_keys=[])
+
+    block = render_upgrade_block(
+        missing,
+        version=_PACKAGE_VERSION,
+        today=datetime.date.today(),
+    )
+    if not append_upgrade_block(path, block):
+        return SyncResult(skipped_reason="io_error", appended_keys=[])
+
+    return SyncResult(
+        skipped_reason=None,
+        appended_keys=[k.dotted_path for k in missing],
+    )
