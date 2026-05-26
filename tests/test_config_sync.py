@@ -141,3 +141,106 @@ def test_find_missing_keys_empty_file(tmp_path):
     p = _write(tmp_path, "")
     missing = find_missing_keys(p, schema_keys(AppConfig))
     assert len(missing) == 13
+
+
+import datetime
+import yaml
+
+from eth_validator_stats.config_sync import render_upgrade_block
+
+
+def _all_schema() -> list[KeySpec]:
+    return schema_keys(AppConfig)
+
+
+def test_render_upgrade_block_header_includes_version_and_date():
+    block = render_upgrade_block(
+        missing=[KeySpec("beacon_auth_token", "", "str")],
+        version="9.9.9",
+        today=datetime.date(2030, 1, 2),
+    )
+    assert "# === Added by eth-validator-stats v9.9.9 on 2030-01-02 ===" in block
+
+
+def test_render_upgrade_block_groups_root_and_alerts():
+    block = render_upgrade_block(
+        missing=[
+            KeySpec("beacon_auth_token", "", "str"),
+            KeySpec("alerts.daily_heartbeat", False, "bool"),
+            KeySpec("alerts.heartbeat_url", "", "str"),
+        ],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    assert "# beacon_auth_token:" in block
+    assert "# alerts:" in block
+    assert "#   daily_heartbeat:" in block
+    assert "#   heartbeat_url:" in block
+    # beacon_auth_token group comes before alerts group
+    assert block.index("beacon_auth_token") < block.index("# alerts:")
+
+
+def test_render_upgrade_block_omits_empty_groups():
+    # Only an alerts.* key is missing; no root-level "# beacon_auth_token" line.
+    block = render_upgrade_block(
+        missing=[KeySpec("alerts.daily_heartbeat", False, "bool")],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    assert "beacon_auth_token" not in block
+
+
+def test_render_upgrade_block_values_round_trip():
+    # Strip the leading "# " from each line and parse the result; ensure
+    # uncommented YAML matches the defaults.
+    block = render_upgrade_block(
+        missing=[
+            KeySpec("beacon_auth_token", "", "str"),
+            KeySpec("alerts.daily_heartbeat", False, "bool"),
+            KeySpec("alerts.daily_heartbeat_hour", 9, "int"),
+            KeySpec("alerts.heartbeat_url", "", "str"),
+        ],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    yaml_lines = []
+    for line in block.splitlines():
+        stripped = line.lstrip()
+        if not stripped.startswith("#"):
+            continue
+        # Strip the comment marker and one optional following space.
+        content = stripped[1:]
+        if content.startswith(" "):
+            content = content[1:]
+        # Skip header/intro lines (the YAML lines all start with a key:
+        # or are nested under a known parent).
+        if content.startswith("==="):
+            continue
+        if content and content[0].isalpha() and ":" in content:
+            # Restore the original indentation level.
+            indent = line[: len(line) - len(stripped)]
+            yaml_lines.append(indent + content)
+        elif content.startswith("  ") and ":" in content:
+            indent = line[: len(line) - len(stripped)]
+            yaml_lines.append(indent + content)
+    parsed = yaml.safe_load("\n".join(yaml_lines))
+    assert parsed["beacon_auth_token"] == ""
+    assert parsed["alerts"]["daily_heartbeat"] is False
+    assert parsed["alerts"]["daily_heartbeat_hour"] == 9
+    assert parsed["alerts"]["heartbeat_url"] == ""
+
+
+def test_render_upgrade_block_long_url_value_renders_on_one_line():
+    long = "https://raw.githubusercontent.com/Workharu/eth-validator-stats/main/assets/icon.png"
+    block = render_upgrade_block(
+        missing=[KeySpec("alerts.icon_url", long, "str")],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    # The line with icon_url contains the full URL with no internal newline.
+    for line in block.splitlines():
+        if "icon_url" in line:
+            assert long in line
+            break
+    else:
+        raise AssertionError("icon_url line not found in block")

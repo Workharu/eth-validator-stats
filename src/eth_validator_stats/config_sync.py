@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime
 import logging
 import typing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -137,3 +140,81 @@ def find_missing_keys(config_path: Path, keys: list[KeySpec]) -> list[KeySpec]:
         if leaf not in text:
             out.append(k)
     return out
+
+
+def _dump_value_line(key: str, value: object) -> str:
+    """Return a single-line YAML dump of {key: value}, no trailing newline."""
+    # default_flow_style=False keeps mapping style; width=1024 prevents
+    # PyYAML from wrapping long string values. allow_unicode=True keeps
+    # any URLs / non-ascii intact.
+    out = yaml.safe_dump(
+        {key: value},
+        default_flow_style=False,
+        width=1024,
+        allow_unicode=True,
+        sort_keys=False,
+    )
+    return out.rstrip("\n")
+
+
+def render_upgrade_block(
+    missing: list[KeySpec],
+    *,
+    version: str,
+    today: datetime.date,
+) -> str:
+    """Render the YAML-comment block to append at the end of the user's config.
+
+    Layout:
+      <blank line>
+      # === Added by eth-validator-stats v{version} on {today} ===
+      # ...explanatory lines...
+      #
+      # <root key 1>: <default>
+      # <root key 2>: <default>
+      #
+      # alerts:
+      #   <leaf 1>: <default>
+      #   <leaf 2>: <default>
+
+    Groups are omitted entirely if they have no missing children.
+    """
+    # Split by parent dotted-prefix, preserving order.
+    root: list[KeySpec] = []
+    grouped: dict[str, list[KeySpec]] = {}
+    group_order: list[str] = []
+    for k in missing:
+        if "." not in k.dotted_path:
+            root.append(k)
+            continue
+        parent, _ = k.dotted_path.split(".", 1)
+        if parent not in grouped:
+            grouped[parent] = []
+            group_order.append(parent)
+        grouped[parent].append(k)
+
+    lines: list[str] = [
+        "",
+        f"# === Added by eth-validator-stats v{version} on {today.isoformat()} ===",
+        "# New config keys introduced in this version. Defaults shown.",
+        "# See config.yml.example or README.md for what each does.",
+        "# (Delete a line if you want it re-added next upgrade; keep the bare",
+        "#  key name in a comment if you want to permanently suppress it.)",
+        "#",
+    ]
+
+    if root:
+        for k in root:
+            lines.append("# " + _dump_value_line(k.dotted_path, k.default))
+        if group_order:
+            lines.append("#")
+
+    for i, parent in enumerate(group_order):
+        lines.append(f"# {parent}:")
+        for k in grouped[parent]:
+            leaf = k.dotted_path.split(".", 1)[1]
+            lines.append("#   " + _dump_value_line(leaf, k.default))
+        if i != len(group_order) - 1:
+            lines.append("#")
+
+    return "\n".join(lines) + "\n"
