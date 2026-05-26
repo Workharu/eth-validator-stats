@@ -52,8 +52,10 @@ def _resolve_type(field_type: Any) -> tuple[type | None, bool]:
     if dataclasses.is_dataclass(field_type):
         return None, True
 
+    import types as _types
+
     origin = typing.get_origin(field_type)
-    if origin is typing.Union:
+    if origin is typing.Union or isinstance(field_type, _types.UnionType):
         args = [a for a in typing.get_args(field_type) if a is not type(None)]
         if len(args) == 1:
             return _resolve_type(args[0])

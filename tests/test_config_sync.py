@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import datetime
+import os
+import stat as stat_mod
 from dataclasses import dataclass, field
-from typing import Optional
+from pathlib import Path
+from unittest.mock import patch
 
-from eth_validator_stats.alerts import AlertsConfig
+import yaml
+
 from eth_validator_stats.config_io import AppConfig
-from eth_validator_stats.config_sync import KeySpec, SyncResult, schema_keys
+from eth_validator_stats.config_sync import (
+    KeySpec,
+    SyncResult,
+    append_upgrade_block,
+    find_missing_keys,
+    render_upgrade_block,
+    schema_keys,
+    sync_user_config,
+)
 
 
 def test_dataclasses_importable():
@@ -58,7 +71,7 @@ def test_schema_keys_excludes_required_and_collections():
 def test_schema_keys_handles_optional_scalar_with_default():
     @dataclass
     class _T:
-        a: Optional[str] = None  # included: optional scalar with default
+        a: str | None = None  # included: optional scalar with default
 
     paths = [k.dotted_path for k in schema_keys(_T)]
     assert paths == ["a"]
@@ -77,11 +90,6 @@ def test_schema_keys_recurses_into_nested_dataclass():
 
     paths = [k.dotted_path for k in schema_keys(_Outer)]
     assert paths == ["inner.x", "inner.y", "top"]
-
-
-from pathlib import Path
-
-from eth_validator_stats.config_sync import find_missing_keys
 
 
 def _write(tmp_path: Path, body: str) -> Path:
@@ -141,12 +149,6 @@ def test_find_missing_keys_empty_file(tmp_path):
     p = _write(tmp_path, "")
     missing = find_missing_keys(p, schema_keys(AppConfig))
     assert len(missing) == 13
-
-
-import datetime
-import yaml
-
-from eth_validator_stats.config_sync import render_upgrade_block
 
 
 def _all_schema() -> list[KeySpec]:
@@ -246,13 +248,6 @@ def test_render_upgrade_block_long_url_value_renders_on_one_line():
         raise AssertionError("icon_url line not found in block")
 
 
-import os
-import stat as stat_mod
-from unittest.mock import patch
-
-from eth_validator_stats.config_sync import append_upgrade_block
-
-
 def test_append_writable_file_appends_and_creates_bak(tmp_path):
     p = _write(tmp_path, "original: yes\n")
     ok = append_upgrade_block(p, "# appended block\n")
@@ -308,9 +303,6 @@ def test_append_preserves_mode_bits_on_bak(tmp_path):
     append_upgrade_block(p, "# appended\n")
     bak = p.with_suffix(p.suffix + ".bak")
     assert (bak.stat().st_mode & 0o777) == 0o600
-
-
-from eth_validator_stats.config_sync import sync_user_config
 
 
 def test_sync_user_config_appends_then_is_idempotent(tmp_path, monkeypatch):
