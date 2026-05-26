@@ -381,3 +381,32 @@ def test_sync_user_config_readonly_returns_not_writable(tmp_path):
         assert result.appended_keys == []
     finally:
         os.chmod(p, stat_mod.S_IRUSR | stat_mod.S_IWUSR)
+
+
+def test_cli_helper_uses_resolved_path(tmp_path, monkeypatch):
+    # Stale config in tmp_path; point the resolver at it via env var.
+    body = "beacon_node_url: http://localhost:3500\nvalidators:\n  - pubkey: '0xabc'\n"
+    cfg_path = tmp_path / "config.yml"
+    cfg_path.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
+
+    from eth_validator_stats.cli import load_config_with_sync
+
+    cfg = load_config_with_sync()
+    assert cfg.beacon_node_url == "http://localhost:3500"
+    # Sync ran: appended block now in file.
+    assert "# === Added by eth-validator-stats" in cfg_path.read_text(encoding="utf-8")
+
+
+def test_cli_helper_respects_disable_env(tmp_path, monkeypatch):
+    body = "beacon_node_url: http://localhost:3500\nvalidators:\n  - pubkey: '0xabc'\n"
+    cfg_path = tmp_path / "config.yml"
+    cfg_path.write_text(body, encoding="utf-8")
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
+    monkeypatch.setenv("ETH_VALIDATOR_STATS_NO_CONFIG_SYNC", "1")
+
+    from eth_validator_stats.cli import load_config_with_sync
+
+    load_config_with_sync()
+    # No append happened because sync was disabled.
+    assert "# === Added by eth-validator-stats" not in cfg_path.read_text(encoding="utf-8")
