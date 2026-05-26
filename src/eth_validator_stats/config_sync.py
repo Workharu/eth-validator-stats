@@ -3,6 +3,8 @@ from __future__ import annotations
 import dataclasses
 import datetime
 import logging
+import os
+import shutil
 import typing
 from dataclasses import dataclass
 from pathlib import Path
@@ -218,3 +220,48 @@ def render_upgrade_block(
             lines.append("#")
 
     return "\n".join(lines) + "\n"
+
+
+def append_upgrade_block(path: Path, block: str) -> bool:
+    """Atomically append `block` to `path` after copying `path` to `.bak`.
+
+    Returns True on success, False on any failure. Never raises.
+
+    Failure modes (all return False):
+      - Path is not writable for the current process.
+      - `shutil.copy2` raises (disk full, source vanished, etc.).
+      - `open(path, "a")` raises (race after the os.access check).
+      - Write itself raises (disk full mid-write).
+    """
+    try:
+        if not os.access(path, os.W_OK):
+            logger.debug("config at %s not writable; skipping sync", path)
+            return False
+    except OSError as exc:
+        logger.debug("config sync os.access on %s failed: %s", path, exc)
+        return False
+
+    bak = path.with_suffix(path.suffix + ".bak")
+    try:
+        shutil.copy2(path, bak)
+    except OSError as exc:
+        logger.debug("config sync bak copy %s -> %s failed: %s", path, bak, exc)
+        return False
+
+    try:
+        needs_leading_newline = False
+        if path.stat().st_size > 0:
+            with path.open("rb") as f:
+                f.seek(-1, os.SEEK_END)
+                last_byte = f.read(1)
+            if last_byte != b"\n":
+                needs_leading_newline = True
+        with path.open("a", encoding="utf-8") as f:
+            if needs_leading_newline:
+                f.write("\n")
+            f.write(block)
+    except OSError as exc:
+        logger.debug("config sync append to %s failed: %s", path, exc)
+        return False
+
+    return True

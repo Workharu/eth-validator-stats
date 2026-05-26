@@ -244,3 +244,67 @@ def test_render_upgrade_block_long_url_value_renders_on_one_line():
             break
     else:
         raise AssertionError("icon_url line not found in block")
+
+
+import os
+import stat as stat_mod
+from unittest.mock import patch
+
+from eth_validator_stats.config_sync import append_upgrade_block
+
+
+def test_append_writable_file_appends_and_creates_bak(tmp_path):
+    p = _write(tmp_path, "original: yes\n")
+    ok = append_upgrade_block(p, "# appended block\n")
+    assert ok is True
+    text = p.read_text(encoding="utf-8")
+    assert text.startswith("original: yes\n")
+    assert "# appended block" in text
+    bak = p.with_suffix(p.suffix + ".bak")
+    assert bak.exists()
+    assert bak.read_text(encoding="utf-8") == "original: yes\n"
+
+
+def test_append_injects_leading_newline_if_missing(tmp_path):
+    p = _write(tmp_path, "last_line: 1")  # no trailing newline
+    append_upgrade_block(p, "# appended\n")
+    text = p.read_text(encoding="utf-8")
+    assert "last_line: 1\n# appended" in text
+
+
+def test_append_no_double_blank_line_when_file_already_ends_in_newline(tmp_path):
+    p = _write(tmp_path, "last_line: 1\n")
+    append_upgrade_block(p, "# appended\n")
+    text = p.read_text(encoding="utf-8")
+    # Exactly one newline between "last_line: 1" and the appended block.
+    assert "last_line: 1\n# appended" in text
+    assert "last_line: 1\n\n# appended" not in text
+
+
+def test_append_readonly_file_returns_false(tmp_path):
+    p = _write(tmp_path, "data\n")
+    os.chmod(p, stat_mod.S_IRUSR | stat_mod.S_IRGRP | stat_mod.S_IROTH)
+    try:
+        ok = append_upgrade_block(p, "# appended\n")
+        assert ok is False
+        assert p.read_text(encoding="utf-8") == "data\n"
+        bak = p.with_suffix(p.suffix + ".bak")
+        assert not bak.exists()
+    finally:
+        os.chmod(p, stat_mod.S_IRUSR | stat_mod.S_IWUSR)
+
+
+def test_append_aborts_if_bak_copy_fails(tmp_path):
+    p = _write(tmp_path, "data\n")
+    with patch("eth_validator_stats.config_sync.shutil.copy2", side_effect=OSError("disk full")):
+        ok = append_upgrade_block(p, "# appended\n")
+    assert ok is False
+    assert p.read_text(encoding="utf-8") == "data\n"
+
+
+def test_append_preserves_mode_bits_on_bak(tmp_path):
+    p = _write(tmp_path, "data\n")
+    os.chmod(p, 0o600)
+    append_upgrade_block(p, "# appended\n")
+    bak = p.with_suffix(p.suffix + ".bak")
+    assert (bak.stat().st_mode & 0o777) == 0o600
