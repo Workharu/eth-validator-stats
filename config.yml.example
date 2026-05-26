@@ -51,3 +51,20 @@ alerts:
   # Set to "" to suppress the icon. Set to your own publicly-fetchable
   # URL to brand pushes differently.
   # icon_url: ""
+
+  # HTTP timeout for outgoing ntfy / heartbeat requests, in seconds.
+  # Lower this on a fast LAN; raise it for slow / proxied transports.
+  request_timeout_s: 5.0
+
+  # Liveness of the monitor itself. Two layers, both off by default.
+  #
+  # Layer 1 — daily "MONITOR ALIVE" ntfy push at the configured hour.
+  # Absence of the morning ping is the signal: if it doesn't arrive,
+  # your monitor process is down.
+  daily_heartbeat: false
+  daily_heartbeat_hour: 9  # local time, 0-23
+
+  # Layer 2 — every successful poll POSTs an empty body to this URL.
+  # Compatible with healthchecks.io, Better Stack, Cronitor, etc.
+  # Sub-5-minute detection latency; empty = disabled.
+  # heartbeat_url: https://hc-ping.com/your-random-uuid
