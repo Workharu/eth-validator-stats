@@ -181,6 +181,10 @@ See [`packaging/linux/README.md`](packaging/linux/README.md) for running the sou
 - [`SECURITY.md`](SECURITY.md) — report a vulnerability
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup and PR workflow
 
+## Acknowledgments
+
+Push notifications are delivered by [ntfy.sh](https://ntfy.sh) — a free, open-source, Apache-2.0-licensed pub-sub system. This project wouldn't be the same without it.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
