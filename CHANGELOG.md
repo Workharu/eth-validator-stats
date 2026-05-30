@@ -10,6 +10,11 @@ For the Debian-format release notes (used by the `.deb` package), see
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-05-30
+### Changed
+- **Missed-proposal icon** unified with other failure events (`✗` → `❌`).
+- **Clean CLI error handling** — unexpected errors show a friendly message instead of a Python traceback; retry with `--log-level DEBUG` for details.
+
 ## [0.6.0] - 2026-05-30
 ### Changed
 - **Unicode icons now prefix every alert body** for at-a-glance recognition: ✅ activated, ⚠️ slashed, 💰 withdrawal, 🔜 proposing soon, 🚫 blind/exit, ❌ missed attestation/offline, 👋 exited, 🟢 recovered, etc.

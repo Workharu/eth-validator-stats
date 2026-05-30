@@ -1,3 +1,11 @@
+eth-validator-stats (0.6.1-1) unstable; urgency=medium
+
+  * Missed-proposal icon unified with other failure events.
+  * Clean CLI error handling — friendly message instead of traceback.
+  * README: added Acknowledgments section crediting ntfy.sh.
+
+ -- privatejava <privatejava@yahoo.com>  Sat, 30 May 2026 12:28:15 +0000
+
 eth-validator-stats (0.6.0-1) unstable; urgency=medium
 
   * Unicode icons now prefix every alert body for at-a-glance recognition.

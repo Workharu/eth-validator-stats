@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.6.0
+Version:        0.6.1
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -231,6 +231,11 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Sat May 30 2026 privatejava <privatejava@yahoo.com> - 0.6.1-1
+- Missed-proposal icon unified with other failure events.
+- Clean CLI error handling — friendly message instead of traceback.
+- README: added Acknowledgments section crediting ntfy.sh.
+
 * Sat May 30 2026 Workharu <Workharu@users.noreply.github.com> - 0.6.0-1
 - Unicode icons now prefix every alert body for at-a-glance recognition.
 - Block proposal wording changed to match Ethereum terminology.
