@@ -119,7 +119,7 @@ Debian 12+ / Ubuntu 22.04+ (also 24.04). The `.deb` bundles its own Python — n
 
 ```bash
 # Latest .deb at https://github.com/Workharu/eth-validator-stats/releases/latest
-sudo apt install -y ./eth-validator-stats_0.5.0-1_amd64.deb
+sudo apt install -y ./eth-validator-stats_0.6.0-1_amd64.deb
 sudo eth-validator-stats init --system
 sudo systemctl status eth-validator-stats
 ```
@@ -131,7 +131,7 @@ Use `apt install ./path.deb` (not `dpkg -i`) so deps like `adduser` resolve. Fil
 <summary><b>Fedora / RHEL / Rocky / Alma 9+ — <code>.rpm</code></b></summary>
 
 ```bash
-sudo dnf install ./eth-validator-stats-0.5.0-1.fc40.x86_64.rpm
+sudo dnf install ./eth-validator-stats-0.6.0-1.fc40.x86_64.rpm
 sudo eth-validator-stats init --system
 sudo systemctl status eth-validator-stats
 ```

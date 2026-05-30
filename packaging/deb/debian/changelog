@@ -1,3 +1,11 @@
+eth-validator-stats (0.6.0-1) unstable; urgency=medium
+
+  * Unicode icons now prefix every alert body for at-a-glance recognition.
+  * Block proposal wording changed to match Ethereum terminology.
+  * __init__.py version synced to match pyproject.toml.
+
+ -- Workharu <Workharu@users.noreply.github.com>  Sat, 30 May 2026 12:00:00 +0000
+
 eth-validator-stats (0.5.0-1) unstable; urgency=medium
 
   * `evs status` is now read-only by default. It renders the on-disk
