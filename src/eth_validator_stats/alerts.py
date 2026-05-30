@@ -224,16 +224,16 @@ def process_lifecycle_alerts(
         if curr in _SLASHED_STATUSES and prev not in _SLASHED_STATUSES:
             transition = f"slashed_{curr}"
             title = f"validator {idx}{label_part} SLASHED"
-            body = f"status: {prev} -> {curr}"
+            body = f"⚠️ status: {prev} -> {curr}"
             priority = "urgent"
         elif curr == "active_ongoing" and prev in _PENDING_STATUSES:
             transition = "activated"
             title = f"validator {idx}{label_part} ACTIVATED"
-            body = f"now attesting (was {prev})"
+            body = f"✅ now attesting (was {prev})"
         elif curr == "active_exiting" and prev == "active_ongoing":
             transition = "exit_initiated"
             title = f"validator {idx}{label_part} EXIT INITIATED"
-            body = "voluntary exit submitted; still attesting until exit epoch"
+            body = "🚫 voluntary exit submitted; still attesting until exit epoch"
         elif (
             curr == "exited_unslashed"
             and prev not in _EXITED_STATUSES
@@ -241,11 +241,11 @@ def process_lifecycle_alerts(
         ):
             transition = "exited"
             title = f"validator {idx}{label_part} EXITED"
-            body = f"exit complete (was {prev})"
+            body = f"👋 exit complete (was {prev})"
         elif curr in _WITHDRAWAL_READY_STATUSES and prev not in _WITHDRAWAL_READY_STATUSES:
             transition = "withdrawal_ready"
             title = f"validator {idx}{label_part} WITHDRAWAL READY"
-            body = "funds claimable"
+            body = "💰 funds claimable"
 
         if transition is None or transition in history:
             continue
@@ -261,14 +261,14 @@ def process_blind(state: dict, error_message: str, notifier: Notifier, cfg: Aler
     until = int(state.get(BLIND_KEY, 0))
     if now < until:
         return
-    notifier.send("MONITOR BLIND", f"beacon node unreachable: {error_message}")
+    notifier.send("MONITOR BLIND", f"🚫 beacon node unreachable: {error_message}")
     state[BLIND_KEY] = now + cfg.cooldown_minutes * 60
 
 
 def clear_blind_if_recovered(state: dict, notifier: Notifier) -> None:
     """Beacon node reachable again after a previous BLIND: send recovery message."""
     if int(state.get(BLIND_KEY, 0)) > 0:
-        notifier.send("MONITOR RECOVERED", "beacon node reachable again")
+        notifier.send("MONITOR RECOVERED", "✅ beacon node reachable again")
         state[BLIND_KEY] = 0
 
 
@@ -336,7 +336,7 @@ def process_validator_alerts(
     else:
         for idx, label in recoveries:
             label_part = f" {label}" if label else ""
-            notifier.send(f"validator {idx}{label_part} RECOVERED", "back to active_ongoing")
+            notifier.send(f"validator {idx}{label_part} RECOVERED", "🟢 back to active_ongoing")
 
     return new_alerts, recoveries
 
@@ -398,7 +398,7 @@ def process_upcoming_proposals(
             label_part = f" {label}" if label else ""
             notifier.send(
                 f"validator {idx}{label_part} proposing soon",
-                f"slot {slot} ({delay_str} away)",
+                f"🔜 slot {slot} ({delay_str} away)",
             )
             prop["alerted"] = True
             fired.append((idx, label, slot))
@@ -416,7 +416,7 @@ def process_proposal_outcomes(
 ) -> list[tuple[int, str, int, bool]]:
     """For each scheduled proposal whose slot has passed and is not yet verified,
     fetch the canonical block header at that slot. If the proposer_index matches our
-    validator, the block landed; otherwise it was missed (or reorged out).
+    validator, the block was proposed; otherwise it was missed (or reorged out).
     Returns [(idx, label, slot, produced)].
     """
     results: list[tuple[int, str, int, bool]] = []
@@ -445,12 +445,12 @@ def process_proposal_outcomes(
             if produced:
                 notifier.send(
                     f"validator {idx}{label_part} proposed slot {slot}",
-                    f"✓ block landed at slot {slot}",
+                    f"✓ block proposed at slot {slot}",
                 )
             else:
                 notifier.send(
                     f"validator {idx}{label_part} missed proposal at slot {slot}",
-                    f"✗ no block produced at slot {slot}",
+                    f"✗ missed block at slot {slot}",
                 )
             prop["verified"] = True
             prop["produced"] = produced

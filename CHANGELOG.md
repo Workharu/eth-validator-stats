@@ -10,6 +10,11 @@ For the Debian-format release notes (used by the `.deb` package), see
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-30
+### Changed
+- **Unicode icons now prefix every alert body** for at-a-glance recognition: ✅ activated, ⚠️ slashed, 💰 withdrawal, 🔜 proposing soon, 🚫 blind/exit, ❌ missed attestation/offline, 👋 exited, 🟢 recovered, etc.
+- **Block proposal wording** changed from "block landed" → "block proposed" / "no block produced" → "missed block" to match Ethereum terminology.
+
 ## [0.5.0] - 2026-05-25
 ### Added
 - **Liveness for the monitor itself** so a dead `eth-validator-stats` doesn't go unnoticed.

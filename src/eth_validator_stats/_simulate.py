@@ -19,17 +19,17 @@ def _label_part(label: str) -> str:
 
 
 def build_missed_attestation(idx: int, label: str, *, last: int = 2) -> tuple[str, str]:
-    return (f"validator {idx}{_label_part(label)}", f"MISSED_ATTESTATIONS last={last}")
+    return (f"validator {idx}{_label_part(label)}", f"❌ MISSED_ATTESTATIONS last={last}")
 
 
 def build_offline(idx: int, label: str, *, status: str = "slashed") -> tuple[str, str]:
-    return (f"validator {idx}{_label_part(label)}", f"OFFLINE status={status}")
+    return (f"validator {idx}{_label_part(label)}", f"❌ OFFLINE status={status}")
 
 
 def build_withdrawal(idx: int, label: str, *, amount_eth: float = 0.001) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} withdrawal",
-        f"{amount_eth:.4f} ETH withdrawn",
+        f"💰 {amount_eth:.4f} ETH withdrawn",
     )
 
 
@@ -38,30 +38,30 @@ def build_proposing_soon(
 ) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} proposing soon",
-        f"slot {slot} ({delay} away)",
+        f"🔜 slot {slot} ({delay} away)",
     )
 
 
 def build_proposed(idx: int, label: str, *, slot: int = 12345) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} proposed slot {slot}",
-        f"✓ block landed at slot {slot}",
+        f"✓ block proposed at slot {slot}",
     )
 
 
 def build_missed_proposal(idx: int, label: str, *, slot: int = 12345) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} missed proposal at slot {slot}",
-        f"✗ no block produced at slot {slot}",
+        f"✗ missed block at slot {slot}",
     )
 
 
 def build_blind() -> tuple[str, str]:
-    return ("MONITOR BLIND", "beacon node unreachable: simulated")
+    return ("MONITOR BLIND", "🚫 beacon node unreachable: simulated")
 
 
 def build_recovered() -> tuple[str, str]:
-    return ("MONITOR RECOVERED", "beacon node reachable again")
+    return ("MONITOR RECOVERED", "✅ beacon node reachable again")
 
 
 # --- lifecycle transitions ---------------------------------------------------
@@ -69,35 +69,35 @@ def build_recovered() -> tuple[str, str]:
 def build_activated(idx: int, label: str) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} ACTIVATED",
-        "now attesting (was pending_queued)",
+        "✅ now attesting (was pending_queued)",
     )
 
 
 def build_exit_initiated(idx: int, label: str) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} EXIT INITIATED",
-        "voluntary exit submitted; still attesting until exit epoch",
+        "🚫 voluntary exit submitted; still attesting until exit epoch",
     )
 
 
 def build_slashed(idx: int, label: str) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} SLASHED",
-        "status: active_ongoing -> active_slashed",
+        "⚠️ status: active_ongoing -> active_slashed",
     )
 
 
 def build_exited(idx: int, label: str) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} EXITED",
-        "exit complete (was active_exiting)",
+        "👋 exit complete (was active_exiting)",
     )
 
 
 def build_withdrawal_ready(idx: int, label: str) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} WITHDRAWAL READY",
-        "funds claimable",
+        "💰 funds claimable",
     )
 
 

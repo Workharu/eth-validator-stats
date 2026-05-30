@@ -452,7 +452,7 @@ def test_proposal_outcome_success():
     out = process_proposal_outcomes(state, 3200, lambda s: 1, notif)
     assert out == [(1, "v1", 3100, True)]
     assert "proposed slot 3100" in notif.sent[0][0]
-    assert "block landed" in notif.sent[0][1]
+    assert "block proposed" in notif.sent[0][1]
     # Title must be ASCII (HTTP header constraint); glyphs live in the body.
     notif.sent[0][0].encode("ascii")
     assert state["validators"]["1"]["scheduled_proposals"][0]["verified"] is True
@@ -684,7 +684,7 @@ def test_lifecycle_pending_initialized_to_active_ongoing_fires_activated():
 
     assert fired == [(42, "v1", "activated")]
     assert notif.sent_with_priority == [
-        ("validator 42 v1 ACTIVATED", "now attesting (was pending_initialized)", None)
+        ("validator 42 v1 ACTIVATED", "✅ now attesting (was pending_initialized)", None)
     ]
 
 

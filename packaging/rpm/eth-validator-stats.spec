@@ -27,7 +27,7 @@
 %global _missing_build_ids_terminate_build 0
 
 Name:           eth-validator-stats
-Version:        0.5.0
+Version:        0.6.0
 Release:        1%{?dist}
 Summary:        Ethereum validator stats watcher
 
@@ -231,6 +231,11 @@ fi
 # dirs (preserving any user-created contents on uninstall).
 
 %changelog
+* Sat May 30 2026 Workharu <Workharu@users.noreply.github.com> - 0.6.0-1
+- Unicode icons now prefix every alert body for at-a-glance recognition.
+- Block proposal wording changed to match Ethereum terminology.
+- __init__.py version synced to match pyproject.toml.
+
 * Mon May 25 2026 privatejava <privatejava@yahoo.com> - 0.5.0-1
 - `evs status` is now read-only by default. It renders the on-disk
   snapshot instead of polling the beacon node, eliminating the race
