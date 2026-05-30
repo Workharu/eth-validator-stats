@@ -24,10 +24,10 @@ from .beacon import BeaconClient
 from .config_io import (
     AppConfig,
     ConfigEntry,
-    _resolve_existing_config,
-    load_config,
+    resolve_config_path,
     write_config,
 )
+from .config_sync import load_config_with_sync
 from .onboarding.prompts import parse_validator_input
 
 
@@ -57,7 +57,7 @@ def _atomic_write_preserving_perms(cfg: AppConfig, path: Path) -> None:
 
 def _resolve_path_to_write() -> Path:
     """Round-trip target = the same file load_config() just read from."""
-    return _resolve_existing_config()
+    return resolve_config_path()
 
 
 def _restart_service_if_installed() -> None:
@@ -74,7 +74,7 @@ def _restart_service_if_installed() -> None:
 # --- add ---------------------------------------------------------------------
 
 def cmd_validators_add(args: argparse.Namespace) -> int:
-    cfg = load_config()
+    cfg = load_config_with_sync()
 
     try:
         kind, value = parse_validator_input(args.identifier)
@@ -186,7 +186,7 @@ def _shorten_pubkey(pk: str | None) -> str:
 
 
 def cmd_validators_list(args: argparse.Namespace) -> int:
-    cfg = load_config()
+    cfg = load_config_with_sync()
     if not cfg.validators:
         print("(no validators configured — `eth-validator-stats init` to start)")
         return 0
@@ -265,7 +265,7 @@ def _find_matches(cfg: AppConfig, target: str) -> list[ConfigEntry]:
 
 
 def cmd_validators_rm(args: argparse.Namespace) -> int:
-    cfg = load_config()
+    cfg = load_config_with_sync()
     if not cfg.validators:
         print("(no validators configured — nothing to remove)")
         return 1

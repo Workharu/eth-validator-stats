@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 from eth_validator_stats.config_io import AppConfig
@@ -151,10 +152,6 @@ def test_find_missing_keys_empty_file(tmp_path):
     assert len(missing) == 13
 
 
-def _all_schema() -> list[KeySpec]:
-    return schema_keys(AppConfig)
-
-
 def test_render_upgrade_block_header_includes_version_and_date():
     block = render_upgrade_block(
         missing=[KeySpec("beacon_auth_token", "", "str")],
@@ -193,8 +190,8 @@ def test_render_upgrade_block_omits_empty_groups():
 
 
 def test_render_upgrade_block_values_round_trip():
-    # Strip the leading "# " from each line and parse the result; ensure
-    # uncommented YAML matches the defaults.
+    # If we uncomment the body (strip leading "# "), the result must parse
+    # as YAML and the values must match the defaults we passed in.
     block = render_upgrade_block(
         missing=[
             KeySpec("beacon_auth_token", "", "str"),
@@ -205,26 +202,17 @@ def test_render_upgrade_block_values_round_trip():
         version="0.5.1",
         today=datetime.date(2026, 5, 26),
     )
-    yaml_lines = []
-    for line in block.splitlines():
-        stripped = line.lstrip()
-        if not stripped.startswith("#"):
+    lines = block.splitlines()
+    # The first bare-"#" line marks the end of the intro block; everything
+    # after it is either a key line ("# key: value" / "#   key: value") or
+    # another bare-"#" group separator. No prose. No bespoke parsing.
+    body_start = lines.index("#")
+    yaml_lines: list[str] = []
+    for ln in lines[body_start + 1 :]:
+        if ln == "#" or ln == "":
             continue
-        # Strip the comment marker and one optional following space.
-        content = stripped[1:]
-        if content.startswith(" "):
-            content = content[1:]
-        # Skip header/intro lines (the YAML lines all start with a key:
-        # or are nested under a known parent).
-        if content.startswith("==="):
-            continue
-        if content and content[0].isalpha() and ":" in content:
-            # Restore the original indentation level.
-            indent = line[: len(line) - len(stripped)]
-            yaml_lines.append(indent + content)
-        elif content.startswith("  ") and ":" in content:
-            indent = line[: len(line) - len(stripped)]
-            yaml_lines.append(indent + content)
+        assert ln.startswith("# "), f"unexpected body line: {ln!r}"
+        yaml_lines.append(ln[2:])
     parsed = yaml.safe_load("\n".join(yaml_lines))
     assert parsed["beacon_auth_token"] == ""
     assert parsed["alerts"]["daily_heartbeat"] is False
@@ -291,7 +279,7 @@ def test_append_readonly_file_returns_false(tmp_path):
 
 def test_append_aborts_if_bak_copy_fails(tmp_path):
     p = _write(tmp_path, "data\n")
-    with patch("eth_validator_stats.config_sync.shutil.copy2", side_effect=OSError("disk full")):
+    with patch("eth_validator_stats.config_sync._safe_copy_bak", side_effect=OSError("disk full")):
         ok = append_upgrade_block(p, "# appended\n")
     assert ok is False
     assert p.read_text(encoding="utf-8") == "data\n"
@@ -303,6 +291,38 @@ def test_append_preserves_mode_bits_on_bak(tmp_path):
     append_upgrade_block(p, "# appended\n")
     bak = p.with_suffix(p.suffix + ".bak")
     assert (bak.stat().st_mode & 0o777) == 0o600
+    # Original's mode survives the append (defends against future refactor
+    # that accidentally chmods the live file).
+    assert (p.stat().st_mode & 0o777) == 0o600
+
+
+def test_append_bak_is_overwritten_on_repeated_dirty_runs(tmp_path):
+    # Spec mandates the .bak is a rolling snapshot — each sync overwrites
+    # any prior .bak with the pre-append state of the original. Guards
+    # against a future "skip if .bak exists" guard accidentally landing.
+    p = _write(tmp_path, "first: 1\n")
+    append_upgrade_block(p, "# first block\n")
+    bak = p.with_suffix(p.suffix + ".bak")
+    assert bak.read_text(encoding="utf-8") == "first: 1\n"
+
+    # Second append simulates a subsequent upgrade producing more drift.
+    append_upgrade_block(p, "# second block\n")
+    # .bak now reflects post-first-append state, not the pristine original.
+    assert "# first block" in bak.read_text(encoding="utf-8")
+
+
+def test_append_aborts_if_dst_is_symlink(tmp_path):
+    # CWE-61 guard: a pre-existing symlink at .bak must not redirect the
+    # backup write. _safe_copy_bak uses O_NOFOLLOW.
+    p = _write(tmp_path, "data\n")
+    victim = tmp_path / "victim.txt"
+    victim.write_text("untouched", encoding="utf-8")
+    bak = p.with_suffix(p.suffix + ".bak")
+    bak.symlink_to(victim)
+    ok = append_upgrade_block(p, "# appended\n")
+    assert ok is False
+    assert victim.read_text(encoding="utf-8") == "untouched"
+    assert p.read_text(encoding="utf-8") == "data\n"
 
 
 def test_sync_user_config_appends_then_is_idempotent(tmp_path, monkeypatch):
@@ -352,6 +372,53 @@ def test_sync_user_config_no_config_returns_no_config(tmp_path):
     assert result.appended_keys == []
 
 
+def test_sync_user_config_binary_garbage_does_not_raise(tmp_path):
+    # Pins the documented "never raises" contract against the most obvious
+    # corrupted-file case. read_text → UnicodeDecodeError → caught by the
+    # broad except in sync_user_config → io_error.
+    p = tmp_path / "config.yml"
+    p.write_bytes(b"\xff\xfe binary garbage \x00\x01")
+    result = sync_user_config(p)
+    assert result.skipped_reason == "io_error"
+    assert result.appended_keys == []
+
+
+def test_sync_user_config_oversized_file_does_not_hang(tmp_path):
+    # Defends against /dev/zero / runaway file pointed at by env var.
+    # find_missing_keys has a 1 MiB guard.
+    p = tmp_path / "config.yml"
+    p.write_bytes(b"# " + b"x" * (2 << 20))  # 2 MiB of harmless filler
+    result = sync_user_config(p)
+    # Skipped because find_missing_keys returns [] → no drift → no append.
+    # Whatever the reason, it must not raise and must not write a .bak.
+    assert result.appended_keys == []
+    assert not p.with_suffix(p.suffix + ".bak").exists()
+
+
+def test_schema_keys_unwraps_optional_dataclass(tmp_path):
+    # Latent crash: a future Optional[NestedDataclass] field would previously
+    # try to call dataclasses.fields(Optional[...]) and raise TypeError.
+    @dataclass
+    class _Inner:
+        x: int = 1
+
+    @dataclass
+    class _Outer:
+        inner: _Inner | None = field(default_factory=_Inner)
+
+    paths = [k.dotted_path for k in schema_keys(_Outer)]
+    assert paths == ["inner.x"]
+
+
+def test_dump_value_line_rejects_multi_line_default():
+    # Future-contributor footgun: a multi-line default would corrupt the
+    # appended block because only the first line would get the "# " prefix.
+    from eth_validator_stats.config_sync import _dump_value_line
+
+    with pytest.raises(ValueError, match="multiple lines"):
+        _dump_value_line("anykey", "line1\nline2")
+
+
 def test_sync_user_config_after_sync_yaml_still_parses(tmp_path):
     body = "beacon_node_url: http://localhost:3500\nvalidators: []\n"
     p = _write(tmp_path, body)
@@ -382,7 +449,7 @@ def test_cli_helper_uses_resolved_path(tmp_path, monkeypatch):
     cfg_path.write_text(body, encoding="utf-8")
     monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
 
-    from eth_validator_stats.cli import load_config_with_sync
+    from eth_validator_stats.config_sync import load_config_with_sync
 
     cfg = load_config_with_sync()
     assert cfg.beacon_node_url == "http://localhost:3500"
@@ -397,8 +464,82 @@ def test_cli_helper_respects_disable_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
     monkeypatch.setenv("ETH_VALIDATOR_STATS_NO_CONFIG_SYNC", "1")
 
-    from eth_validator_stats.cli import load_config_with_sync
+    from eth_validator_stats.config_sync import load_config_with_sync
 
     load_config_with_sync()
     # No append happened because sync was disabled.
     assert "# === Added by eth-validator-stats" not in cfg_path.read_text(encoding="utf-8")
+
+
+def test_render_upgrade_block_includes_hint_for_known_keys():
+    block = render_upgrade_block(
+        missing=[
+            KeySpec("beacon_auth_token", "", "str"),
+            KeySpec("alerts.daily_heartbeat_hour", 9, "int"),
+            KeySpec("alerts.heartbeat_url", "", "str"),  # no hint registered
+        ],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    # beacon_auth_token has a hint — should render with trailing comment.
+    assert "beacon_auth_token: ''  # optional bearer token" in block
+    # daily_heartbeat_hour has a hint — should carry the unit annotation.
+    assert "daily_heartbeat_hour: 9  # local time, 0-23" in block
+    # heartbeat_url has no hint — line should end without a trailing comment.
+    # (Spot-check by ensuring no extra "# " trails the bare key line.)
+    assert "heartbeat_url: ''\n" in block or "heartbeat_url: ''" == block.splitlines()[-1].lstrip("# ").rstrip()
+
+
+def test_render_upgrade_block_intro_drops_readme_pointer():
+    block = render_upgrade_block(
+        missing=[KeySpec("beacon_auth_token", "", "str")],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    # README pointer was misleading (most keys have no README entry) — removed.
+    assert "README.md" not in block
+    # Sentinel-disable mechanism is documented in the intro.
+    assert "# config-sync: off" in block
+
+
+def test_sync_user_config_respects_sentinel(tmp_path):
+    body = (
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "# config-sync: off\n"
+    )
+    p = _write(tmp_path, body)
+    result = sync_user_config(p)
+    assert result.skipped_reason == "sentinel"
+    assert result.appended_keys == []
+    # File untouched; no .bak either.
+    assert p.read_text(encoding="utf-8") == body
+    assert not p.with_suffix(p.suffix + ".bak").exists()
+
+
+def test_sync_user_config_sentinel_matches_after_lstrip(tmp_path):
+    # User indented the sentinel — still recognized.
+    body = (
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "    # config-sync: off\n"
+    )
+    p = _write(tmp_path, body)
+    assert sync_user_config(p).skipped_reason == "sentinel"
+
+
+def test_sync_user_config_intro_sentinel_mention_does_not_self_trigger(tmp_path):
+    # The intro line embeds "    # config-sync: off" inside another comment
+    # (with leading "#     "). It must not be parsed as the bare sentinel.
+    body = "beacon_node_url: http://localhost:3500\nvalidators: []\n"
+    p = _write(tmp_path, body)
+    # First sync appends the block (which mentions the sentinel in its intro).
+    r1 = sync_user_config(p)
+    assert r1.skipped_reason is None
+    assert r1.appended_keys  # non-empty
+
+    # Second sync: must NOT detect the embedded mention as an active sentinel.
+    # It should find no drift (all keys already in file as comments) → no-op.
+    r2 = sync_user_config(p)
+    assert r2.skipped_reason is None  # not "sentinel"
+    assert r2.appended_keys == []

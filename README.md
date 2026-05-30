@@ -8,6 +8,60 @@
 
 Watch your Ethereum validators from a tiny self-hosted CLI. It talks to *your* beacon node (no third-party telemetry) and pushes alerts straight to your phone via [ntfy](https://ntfy.sh).
 
+<table>
+  <tr>
+    <td><img src="assets/screenshots/ntfy-missed-attestations.png" alt="MISSED ATTESTATIONS push on the phone"></td>
+    <td><img src="assets/screenshots/ntfy-app-list.png" alt="Notification history in the ntfy app"></td>
+    <td><img src="assets/screenshots/ntfy-proposed.png" alt="Proposed-block notification in the system tray"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>operational alert — missed attestations</sub></td>
+    <td align="center"><sub>your push history in the ntfy app</sub></td>
+    <td align="center"><sub>✓ proposed block (positive event)</sub></td>
+  </tr>
+</table>
+
+## Install in 60 seconds
+
+```bash
+# Auto-detects .deb / .rpm / pipx and installs the right one (Linux & macOS).
+curl -fsSL https://raw.githubusercontent.com/Workharu/eth-validator-stats/main/scripts/install.sh | sudo bash
+
+# Interactive wizard: probes your beacon node, generates an ntfy topic, scans a QR for your phone.
+sudo eth-validator-stats init
+
+# Sanity-check the last snapshot
+eth-validator-stats status
+```
+
+That's it. On `.deb` / `.rpm` installs, `init` also starts a `systemd` service that polls every 60 seconds.
+
+> `evs` is a 3-character alias for `eth-validator-stats` — `evs status`, `evs check --missed 3`, etc.
+
+## How notifications work
+
+Your phone subscribes to a private [ntfy.sh](https://ntfy.sh) topic that only you know. The CLI POSTs to that topic; ntfy pushes to your phone. The `init` wizard generates a random topic name, prints a QR you scan with the ntfy mobile app ([iOS](https://apps.apple.com/us/app/ntfy/id1625396347) / [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy)), and you're done.
+
+**Verify the pipe before you trust it:**
+
+```bash
+eth-validator-stats simulate slashed     # urgent push (bypasses Do-Not-Disturb)
+eth-validator-stats simulate missed      # normal-priority push
+```
+
+You should see them on your phone within a second.
+
+## What you get pushed
+
+- **Health** — `OFFLINE`, `MISSED ATTESTATIONS`, `withdrawal`, `MONITOR BLIND` / `MONITOR RECOVERED`
+- **Proposals** — `proposing soon`, `✓ proposed`, `✗ missed proposal`
+- **Lifecycle** — `ACTIVATED`, **`SLASHED`** (urgent), `EXIT INITIATED`, `EXITED`, `WITHDRAWAL READY`
+- **Liveness** — daily `MONITOR ALIVE` so silence means something. Want sub-5-minute detection? Set `alerts.heartbeat_url` to a free [healthchecks.io](https://healthchecks.io/) URL.
+
+One push per event, deduplicated per-validator with a configurable cooldown. Full reference (thresholds, env vars, every flag) is in [`docs/USAGE.md`](docs/USAGE.md).
+
+And a status table you can pull on-demand:
+
 ```
                          Validators
 ┏━━━━━━━━┳━━━━━━━━┳════════════════┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┓
@@ -20,160 +74,24 @@ Watch your Ethereum validators from a tiny self-hosted CLI. It talks to *your* b
 
 `●` attested, `·` missed, `?` not yet observed.
 
-## Quick start
+## Commands
 
 ```bash
-# 1. Install (Linux + macOS, auto-detects .deb / .rpm / pipx)
-curl -fsSL https://raw.githubusercontent.com/Workharu/eth-validator-stats/main/scripts/install.sh | sudo bash
+evs status                              # last snapshot (read-only; --refresh to poll first)
+evs watch                               # loop forever (what the systemd service runs)
+evs check --missed 3                    # one-shot for cron — exits 2 if any alert fires
 
-# 2. Configure (interactive wizard: finds your node, sets up ntfy)
-sudo eth-validator-stats init
+evs validators add 12345 --label home-1
+evs validators list --status
+evs validators rm home-1
 
-# 3. Check it works
-eth-validator-stats status
+evs simulate <event>                    # test the push pipe end-to-end
+evs info                                # probe your beacon node's API
 ```
-
-That's it. On `.deb` / `.rpm` installs, step 2 also starts a `systemd` service that watches your validators every 60 seconds.
-
-> **Tip:** Every command also responds to `evs` (3 chars). `evs status`, `evs check --missed 3`, etc.
-
-## What you'll be notified about
-
-Every alert is one ntfy push, deduplicated per-validator with a configurable cooldown.
-
-**Health alerts** — fire while something is wrong, clear when it recovers:
-
-| Push | Means |
-|---|---|
-| `OFFLINE` | Validator left `active_ongoing` (slashed, exiting, exited, etc.) |
-| `MISSED_ATTESTATIONS` | N consecutive misses (default 2) for an `active_ongoing` validator |
-| `withdrawal` | Balance dropped ≥ 0.001 ETH |
-| `MONITOR BLIND` / `MONITOR RECOVERED` | Beacon node unreachable / back up |
-
-**Proposal alerts**:
-
-| Push | When |
-|---|---|
-| `proposing soon` | A configured validator is scheduled to propose in the next ~6 min |
-| `✓ proposed` / `✗ missed proposal` | The slot has passed, verified against the canonical head |
-
-**Lifecycle milestones** — one-shot per validator transition:
-
-| Push | Transition | Priority |
-|---|---|---|
-| `ACTIVATED` | `pending_*` → `active_ongoing` (joined the active set) | Normal |
-| `EXIT INITIATED` | `active_ongoing` → `active_exiting` | Normal |
-| **`SLASHED`** | anything → `active_slashed` / `exited_slashed` | **Urgent** (bypasses Do-Not-Disturb) |
-| `EXITED` | `active_exiting` → `exited_unslashed` | Normal |
-| `WITHDRAWAL READY` | exited → `withdrawal_possible` (funds claimable) | Normal |
-
-**Liveness of the monitor itself** — so a dead monitor doesn't go unnoticed:
-
-| Push | When |
-|---|---|
-| `MONITOR ALIVE` | Once a day at the configured hour (default 9 AM). Absence is the signal — if your morning ping doesn't show, the monitor is down. |
-
-Want sub-5-minute detection? Set `alerts.heartbeat_url` to a [healthchecks.io](https://healthchecks.io/) ping URL (free, 1-click GitHub login) and they'll notify your ntfy if our process goes silent.
-
-Verify any push without waiting for a real event:
-
-```bash
-eth-validator-stats simulate slashed    # check that urgent pushes bypass DND
-```
-
-## Commands at a glance
-
-```bash
-eth-validator-stats status                # render the last snapshot from disk (read-only;
-                                          # add --refresh to also poll the beacon node first)
-eth-validator-stats watch                 # loop forever (what the systemd service runs)
-eth-validator-stats check --missed 3      # one-shot for cron — exits 2 if any alert fires
-
-eth-validator-stats validators add 12345 --label home-1
-eth-validator-stats validators list --status
-eth-validator-stats validators rm home-1
-
-eth-validator-stats simulate <event>      # test ntfy pipe end-to-end
-eth-validator-stats info                  # probe your beacon node's API
-```
-
-## Install
-
-The one-liner above covers most setups. If you'd rather pick a path explicitly:
-
-<details>
-<summary><b>Debian / Ubuntu — <code>.deb</code></b></summary>
-
-Works on Debian 12+ and Ubuntu 22.04+ (also 24.04 — no deadsnakes PPA needed; the `.deb` bundles its own Python).
-
-```bash
-# Download the .deb for your arch from
-# https://github.com/Workharu/eth-validator-stats/releases/latest
-sudo apt install -y ./eth-validator-stats_0.5.0-1_amd64.deb
-sudo eth-validator-stats init --system
-sudo systemctl status eth-validator-stats
-```
-
-Use `apt install ./path.deb` (not `dpkg -i`) so deps like `adduser` auto-resolve. Files go to `/opt/eth-validator-stats/`, the binary symlinks into `/usr/bin/`, and config + state live in `/etc/eth-validator-stats/` and `/var/lib/eth-validator-stats/`.
-
-Upgrade by installing a newer `.deb` — config and state are preserved. `apt remove` keeps them; `apt purge` wipes everything.
-</details>
-
-<details>
-<summary><b>Fedora / RHEL / Rocky / Alma 9+ — <code>.rpm</code></b></summary>
-
-```bash
-# Download the .rpm for your arch from the latest release
-sudo dnf install ./eth-validator-stats-0.5.0-1.fc40.x86_64.rpm
-sudo eth-validator-stats init --system
-sudo systemctl status eth-validator-stats
-```
-
-Same paths and semantics as the `.deb`. `dnf remove` keeps config + state; manual `rm -rf /etc/eth-validator-stats /var/lib/eth-validator-stats` if you want them gone.
-</details>
-
-<details>
-<summary><b>macOS, Windows, or any host without <code>.deb</code>/<code>.rpm</code> — <code>pipx</code></b></summary>
-
-```bash
-# Install pipx if you don't have it:
-#   apt:    sudo apt install pipx
-#   dnf:    sudo dnf install pipx
-#   brew:   brew install pipx
-pipx install eth-validator-stats
-eth-validator-stats init        # per-user config at ~/.config/eth-validator-stats/
-```
-
-To get the same systemd service the distro packages provide:
-
-```bash
-sudo eth-validator-stats install-service    # system-scope unit
-eth-validator-stats install-service --user  # or: per-user, no sudo
-sudo eth-validator-stats init --system      # writes config + starts service
-```
-
-Upgrade with `pipx install --force eth-validator-stats`. Uninstall with `sudo eth-validator-stats uninstall-service --purge && pipx uninstall eth-validator-stats`.
-</details>
-
-<details>
-<summary><b>From source (development)</b></summary>
-
-```bash
-git clone https://github.com/Workharu/eth-validator-stats
-cd eth-validator-stats
-uv sync
-uv run eth-validator-stats status     # prefix every command with `uv run`
-uv run pytest -q                      # run the test suite
-```
-
-See [`packaging/linux/README.md`](packaging/linux/README.md) for running the source build as a systemd service without packaging.
-</details>
-
-Pre-built `.deb` / `.rpm` (amd64 + arm64) and the PyPI wheel are attached to every [tagged release](https://github.com/Workharu/eth-validator-stats/releases/latest).
 
 ## Configuration
 
-Generated by `init`. Edit directly anytime — `validators add/list/rm` is just a convenience.
+`init` writes a `config.yml`. Edit it directly anytime — `validators add/list/rm` is a convenience for skipping YAML.
 
 ```yaml
 beacon_node_url: http://localhost:3500
@@ -186,17 +104,82 @@ alerts:
   missed_attestations_threshold: 2
 ```
 
-The CLI looks for config in this order: `$ETH_VALIDATOR_STATS_CONFIG` → `/etc/eth-validator-stats/config.yml` → `~/.config/eth-validator-stats/config.yml`. First match wins. `init` writes the per-user path by default; `init --system` writes `/etc/`.
+Full annotated example: [`config.yml.example`](config.yml.example). Lookup order: `$ETH_VALIDATOR_STATS_CONFIG` → `/etc/eth-validator-stats/config.yml` → `~/.config/eth-validator-stats/config.yml`. First match wins.
 
-For the full reference (every alert option, env vars, the on-the-wire request shapes), see [USAGE.md](docs/USAGE.md).
+When you upgrade and the schema grows, the CLI appends new keys (commented out, with defaults) to your existing `config.yml` so you can see what's available. Drop `# config-sync: off` anywhere in the file to opt out.
 
-## Compatibility
+## Install paths (manual)
 
-Works with any client that implements the standard [Ethereum Beacon API](https://ethereum.github.io/beacon-APIs/): Prysm, Lighthouse, Teku, Nimbus, Lodestar. Run `eth-validator-stats info` to probe a new node's endpoint support. Detailed matrix: [COMPATIBILITY.md](COMPATIBILITY.md).
+The curl one-liner above covers most setups. Pick a path explicitly if you prefer:
 
-## Contributing
+<details>
+<summary><b>Debian / Ubuntu — <code>.deb</code></b></summary>
 
-`uv sync && uv run pytest -q` to get going. PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and [SECURITY.md](SECURITY.md) for how to report vulnerabilities. Full changelog in [CHANGELOG.md](CHANGELOG.md).
+Debian 12+ / Ubuntu 22.04+ (also 24.04). The `.deb` bundles its own Python — no PPAs.
+
+```bash
+# Latest .deb at https://github.com/Workharu/eth-validator-stats/releases/latest
+sudo apt install -y ./eth-validator-stats_0.5.0-1_amd64.deb
+sudo eth-validator-stats init --system
+sudo systemctl status eth-validator-stats
+```
+
+Use `apt install ./path.deb` (not `dpkg -i`) so deps like `adduser` resolve. Files: `/opt/eth-validator-stats/`, symlinks in `/usr/bin/`, config + state at `/etc/eth-validator-stats/` and `/var/lib/eth-validator-stats/`. `apt remove` keeps user data; `apt purge` wipes everything.
+</details>
+
+<details>
+<summary><b>Fedora / RHEL / Rocky / Alma 9+ — <code>.rpm</code></b></summary>
+
+```bash
+sudo dnf install ./eth-validator-stats-0.5.0-1.fc40.x86_64.rpm
+sudo eth-validator-stats init --system
+sudo systemctl status eth-validator-stats
+```
+
+Same paths and semantics as the `.deb`. `dnf remove` keeps config + state.
+</details>
+
+<details>
+<summary><b>macOS / hosts without <code>.deb</code> or <code>.rpm</code> — <code>pipx</code></b></summary>
+
+```bash
+# Install pipx first if needed: apt|dnf install pipx, or `brew install pipx` on macOS.
+pipx install eth-validator-stats
+eth-validator-stats init        # per-user config at ~/.config/eth-validator-stats/
+```
+
+For systemd integration on Linux without the distro packages:
+
+```bash
+sudo eth-validator-stats install-service       # system-scope unit
+eth-validator-stats install-service --user     # or per-user, no sudo
+sudo eth-validator-stats init --system         # writes config + starts service
+```
+
+Upgrade: `pipx install --force eth-validator-stats`. Uninstall: `sudo eth-validator-stats uninstall-service --purge && pipx uninstall eth-validator-stats`.
+</details>
+
+<details>
+<summary><b>From source (development)</b></summary>
+
+```bash
+git clone https://github.com/Workharu/eth-validator-stats
+cd eth-validator-stats
+uv sync
+uv run eth-validator-stats status
+uv run pytest -q
+```
+
+See [`packaging/linux/README.md`](packaging/linux/README.md) for running the source build as a systemd unit.
+</details>
+
+## More
+
+- [`COMPATIBILITY.md`](COMPATIBILITY.md) — beacon clients tested (Prysm / Lighthouse / Teku / Nimbus / Lodestar)
+- [`docs/USAGE.md`](docs/USAGE.md) — every flag, env var, and alert option in full
+- [`CHANGELOG.md`](CHANGELOG.md) — releases
+- [`SECURITY.md`](SECURITY.md) — report a vulnerability
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — dev setup and PR workflow
 
 ## License
 

@@ -38,7 +38,7 @@ def config_path() -> Path:
 
     Honors ETH_VALIDATOR_STATS_CONFIG as an explicit override. Used by
     `init` (without --system) to decide where to drop the new config.
-    For READING, use load_config() or _resolve_existing_config() — those
+    For READING, use load_config() or resolve_config_path() — those
     additionally consult /etc/eth-validator-stats/config.yml.
     """
     override = os.environ.get("ETH_VALIDATOR_STATS_CONFIG")
@@ -51,7 +51,7 @@ def config_path() -> Path:
 def load_config(path: Path | None = None) -> AppConfig:
     """Load a YAML config. Path is auto-resolved if None."""
     if path is None:
-        p = _resolve_existing_config()
+        p = resolve_config_path()
     else:
         p = path
 
@@ -195,7 +195,7 @@ def _exists_safely(p: Path) -> bool | None:
         return None
 
 
-def _resolve_existing_config() -> Path:
+def resolve_config_path() -> Path:
     """Find the first existing config file along the search chain.
 
     Order:
