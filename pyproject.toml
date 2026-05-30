@@ -32,6 +32,7 @@ dependencies = [
     "segno>=1.6",
     "platformdirs>=4.0",
     "typer>=0.12,<1.0",
+    "click>=8.0",
 ]
 
 [project.urls]
