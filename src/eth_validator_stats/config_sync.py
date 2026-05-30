@@ -4,11 +4,11 @@ import dataclasses
 import datetime
 import logging
 import os
-import shutil
+import types
 import typing
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -35,39 +35,38 @@ class SyncResult:
     #   "no_config"   load_config-resolved path doesn't exist
     #   "not_writable"  os.access W_OK returned False
     #   "disabled"  ETH_VALIDATOR_STATS_NO_CONFIG_SYNC=1
-    #   "io_error"  shutil/open raised
-    skipped_reason: str | None
+    #   "io_error"  copy/open raised
+    skipped_reason: Literal["no_config", "not_writable", "disabled", "io_error"] | None
     appended_keys: list[str]  # dotted paths actually written to disk
 
 
 _SCALAR_TYPES = (str, int, float, bool)
 
 
-def _resolve_type(field_type: Any) -> tuple[type | None, bool]:
-    """Return (concrete_scalar_type_or_None, is_nested_dataclass).
+def _resolve_type(field_type: Any) -> tuple[type | None, type | None]:
+    """Return (scalar_type_or_None, nested_dataclass_or_None).
 
-    Handles Optional[T] by unwrapping to T. Anything that's neither a
-    scalar nor a dataclass returns (None, False) and gets skipped.
+    Both None means skip this field. Handles Optional[T] by unwrapping to T
+    so callers always receive the concrete dataclass when present, never a
+    Union wrapper.
     """
     if dataclasses.is_dataclass(field_type):
-        return None, True
-
-    import types as _types
+        return None, field_type
 
     origin = typing.get_origin(field_type)
-    if origin is typing.Union or isinstance(field_type, _types.UnionType):
+    if origin is typing.Union or isinstance(field_type, types.UnionType):
         args = [a for a in typing.get_args(field_type) if a is not type(None)]
         if len(args) == 1:
             return _resolve_type(args[0])
-        return None, False
+        return None, None
 
     if origin in (list, dict, tuple, set, frozenset):
-        return None, False
+        return None, None
 
     if isinstance(field_type, type) and issubclass(field_type, _SCALAR_TYPES):
-        return field_type, False
+        return field_type, None
 
-    return None, False
+    return None, None
 
 
 def _has_default(f: dataclasses.Field) -> tuple[bool, Any]:
@@ -102,17 +101,16 @@ def schema_keys(cls: type, _prefix: str = "") -> list[KeySpec]:
     out: list[KeySpec] = []
     for f in dataclasses.fields(cls):
         ftype = hints.get(f.name, f.type)
-        scalar, is_nested = _resolve_type(ftype)
-        has_default, default = _has_default(f)
+        scalar, nested_cls = _resolve_type(ftype)
 
-        if is_nested:
+        if nested_cls is not None:
             # Always recurse into nested dataclasses, even if the parent
             # field has no default — we're not auto-populating the
             # parent, just discovering its leaves.
-            sub_cls = ftype
-            out.extend(schema_keys(sub_cls, _prefix=f"{_prefix}{f.name}."))
+            out.extend(schema_keys(nested_cls, _prefix=f"{_prefix}{f.name}."))
             continue
 
+        has_default, default = _has_default(f)
         if not has_default or scalar is None:
             continue
 
@@ -126,31 +124,52 @@ def schema_keys(cls: type, _prefix: str = "") -> list[KeySpec]:
     return out
 
 
+_MAX_CONFIG_SIZE = 1 << 20  # 1 MiB — paranoia bound against /dev/zero or runaway files
+
+
 def find_missing_keys(config_path: Path, keys: list[KeySpec]) -> list[KeySpec]:
     """Return the subset of `keys` whose leaf name is not present anywhere
     in the raw text of `config_path` (parsed values, comments, anywhere).
 
     Leaf-name match is intentional: it gives us free idempotency against
     blocks we previously appended, and treats commented-out values as
-    "user already knows about this".
+    "user already knows about this". Correctness depends on leaf-name
+    uniqueness across the schema, which we assert.
 
-    If the file is unreadable, return an empty list — sync becomes a no-op.
+    If the file is unreadable, too large, or non-UTF-8, return an empty list
+    — sync becomes a no-op.
     """
+    leaf_names = [k.dotted_path.rsplit(".", 1)[-1] for k in keys]
+    assert len(leaf_names) == len(set(leaf_names)), (
+        f"config_sync: duplicate leaf names would cause false-negatives: "
+        f"{[n for n in leaf_names if leaf_names.count(n) > 1]}"
+    )
+
     try:
+        if config_path.stat().st_size > _MAX_CONFIG_SIZE:
+            logger.debug(
+                "config at %s exceeds %d bytes; skipping sync", config_path, _MAX_CONFIG_SIZE
+            )
+            return []
         text = config_path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return []
 
     out: list[KeySpec] = []
-    for k in keys:
-        leaf = k.dotted_path.rsplit(".", 1)[-1]
+    for k, leaf in zip(keys, leaf_names, strict=True):
         if leaf not in text:
             out.append(k)
     return out
 
 
 def _dump_value_line(key: str, value: object) -> str:
-    """Return a single-line YAML dump of {key: value}, no trailing newline."""
+    """Return a single-line YAML dump of {key: value}, no trailing newline.
+
+    Raises ValueError if the dump spans multiple lines — a multi-line default
+    would break the surrounding comment block (only the first line gets the
+    `# ` prefix in the appender). Today no AppConfig default triggers this;
+    the guard is for future contributors.
+    """
     # default_flow_style=False keeps mapping style; width=1024 prevents
     # PyYAML from wrapping long string values. allow_unicode=True keeps
     # any URLs / non-ascii intact.
@@ -161,7 +180,13 @@ def _dump_value_line(key: str, value: object) -> str:
         allow_unicode=True,
         sort_keys=False,
     )
-    return out.rstrip("\n")
+    result = out.rstrip("\n")
+    if "\n" in result:
+        raise ValueError(
+            f"config_sync: default for {key!r} dumps to multiple lines; "
+            "would corrupt the appended YAML comment block"
+        )
+    return result
 
 
 def render_upgrade_block(
@@ -227,6 +252,26 @@ def render_upgrade_block(
     return "\n".join(lines) + "\n"
 
 
+def _safe_copy_bak(src: Path, dst: Path) -> None:
+    """Copy `src` bytes to `dst`, refusing to follow if `dst` is a symlink.
+
+    Raises OSError (ELOOP on Linux/macOS) if `dst` exists and is a symlink —
+    defends against an attacker pre-planting `config.yml.bak` as a symlink
+    pointing at a file they want the CLI to clobber. Preserves the source's
+    permission bits via fchmod on the open fd (no umask interference, no
+    TOCTOU window). O_NOFOLLOW is unavailable on Windows; falls back to 0.
+    """
+    data = src.read_bytes()
+    src_mode = src.stat().st_mode & 0o777
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | nofollow, 0o600)
+    try:
+        os.write(fd, data)
+        os.fchmod(fd, src_mode)
+    finally:
+        os.close(fd)
+
+
 def append_upgrade_block(path: Path, block: str) -> bool:
     """Atomically append `block` to `path` after copying `path` to `.bak`.
 
@@ -234,7 +279,7 @@ def append_upgrade_block(path: Path, block: str) -> bool:
 
     Failure modes (all return False):
       - Path is not writable for the current process.
-      - `shutil.copy2` raises (disk full, source vanished, etc.).
+      - `_safe_copy_bak` raises (disk full, dst is a symlink, etc.).
       - `open(path, "a")` raises (race after the os.access check).
       - Write itself raises (disk full mid-write).
     """
@@ -248,7 +293,7 @@ def append_upgrade_block(path: Path, block: str) -> bool:
 
     bak = path.with_suffix(path.suffix + ".bak")
     try:
-        shutil.copy2(path, bak)
+        _safe_copy_bak(path, bak)
     except OSError as exc:
         logger.debug("config sync bak copy %s -> %s failed: %s", path, bak, exc)
         return False
@@ -281,13 +326,18 @@ def sync_user_config(path: Path) -> SyncResult:
     if os.environ.get("ETH_VALIDATOR_STATS_NO_CONFIG_SYNC") == "1":
         return SyncResult(skipped_reason="disabled", appended_keys=[])
 
-    if not path.exists():
-        return SyncResult(skipped_reason="no_config", appended_keys=[])
-
-    if not os.access(path, os.W_OK):
-        # Check up-front so we report "not_writable" even when there's no drift.
-        # append_upgrade_block also checks, but only after find_missing_keys runs.
-        return SyncResult(skipped_reason="not_writable", appended_keys=[])
+    try:
+        if not path.exists():
+            return SyncResult(skipped_reason="no_config", appended_keys=[])
+        if not os.access(path, os.W_OK):
+            # Check up-front so we report "not_writable" even when there's no drift.
+            # append_upgrade_block also checks, but only after find_missing_keys runs.
+            return SyncResult(skipped_reason="not_writable", appended_keys=[])
+    except OSError as exc:
+        # Path.exists() / os.access can raise PermissionError when a parent
+        # directory denies traversal — must not propagate.
+        logger.debug("config sync path check on %s failed: %s", path, exc)
+        return SyncResult(skipped_reason="io_error", appended_keys=[])
 
     try:
         keys = schema_keys(AppConfig)

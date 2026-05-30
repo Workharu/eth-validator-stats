@@ -291,7 +291,7 @@ def test_append_readonly_file_returns_false(tmp_path):
 
 def test_append_aborts_if_bak_copy_fails(tmp_path):
     p = _write(tmp_path, "data\n")
-    with patch("eth_validator_stats.config_sync.shutil.copy2", side_effect=OSError("disk full")):
+    with patch("eth_validator_stats.config_sync._safe_copy_bak", side_effect=OSError("disk full")):
         ok = append_upgrade_block(p, "# appended\n")
     assert ok is False
     assert p.read_text(encoding="utf-8") == "data\n"
