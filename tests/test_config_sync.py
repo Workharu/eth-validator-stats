@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 from eth_validator_stats.config_io import AppConfig
@@ -151,10 +152,6 @@ def test_find_missing_keys_empty_file(tmp_path):
     assert len(missing) == 13
 
 
-def _all_schema() -> list[KeySpec]:
-    return schema_keys(AppConfig)
-
-
 def test_render_upgrade_block_header_includes_version_and_date():
     block = render_upgrade_block(
         missing=[KeySpec("beacon_auth_token", "", "str")],
@@ -193,8 +190,8 @@ def test_render_upgrade_block_omits_empty_groups():
 
 
 def test_render_upgrade_block_values_round_trip():
-    # Strip the leading "# " from each line and parse the result; ensure
-    # uncommented YAML matches the defaults.
+    # If we uncomment the body (strip leading "# "), the result must parse
+    # as YAML and the values must match the defaults we passed in.
     block = render_upgrade_block(
         missing=[
             KeySpec("beacon_auth_token", "", "str"),
@@ -205,26 +202,17 @@ def test_render_upgrade_block_values_round_trip():
         version="0.5.1",
         today=datetime.date(2026, 5, 26),
     )
-    yaml_lines = []
-    for line in block.splitlines():
-        stripped = line.lstrip()
-        if not stripped.startswith("#"):
+    lines = block.splitlines()
+    # The first bare-"#" line marks the end of the intro block; everything
+    # after it is either a key line ("# key: value" / "#   key: value") or
+    # another bare-"#" group separator. No prose. No bespoke parsing.
+    body_start = lines.index("#")
+    yaml_lines: list[str] = []
+    for ln in lines[body_start + 1 :]:
+        if ln == "#" or ln == "":
             continue
-        # Strip the comment marker and one optional following space.
-        content = stripped[1:]
-        if content.startswith(" "):
-            content = content[1:]
-        # Skip header/intro lines (the YAML lines all start with a key:
-        # or are nested under a known parent).
-        if content.startswith("==="):
-            continue
-        if content and content[0].isalpha() and ":" in content:
-            # Restore the original indentation level.
-            indent = line[: len(line) - len(stripped)]
-            yaml_lines.append(indent + content)
-        elif content.startswith("  ") and ":" in content:
-            indent = line[: len(line) - len(stripped)]
-            yaml_lines.append(indent + content)
+        assert ln.startswith("# "), f"unexpected body line: {ln!r}"
+        yaml_lines.append(ln[2:])
     parsed = yaml.safe_load("\n".join(yaml_lines))
     assert parsed["beacon_auth_token"] == ""
     assert parsed["alerts"]["daily_heartbeat"] is False
@@ -303,6 +291,38 @@ def test_append_preserves_mode_bits_on_bak(tmp_path):
     append_upgrade_block(p, "# appended\n")
     bak = p.with_suffix(p.suffix + ".bak")
     assert (bak.stat().st_mode & 0o777) == 0o600
+    # Original's mode survives the append (defends against future refactor
+    # that accidentally chmods the live file).
+    assert (p.stat().st_mode & 0o777) == 0o600
+
+
+def test_append_bak_is_overwritten_on_repeated_dirty_runs(tmp_path):
+    # Spec mandates the .bak is a rolling snapshot — each sync overwrites
+    # any prior .bak with the pre-append state of the original. Guards
+    # against a future "skip if .bak exists" guard accidentally landing.
+    p = _write(tmp_path, "first: 1\n")
+    append_upgrade_block(p, "# first block\n")
+    bak = p.with_suffix(p.suffix + ".bak")
+    assert bak.read_text(encoding="utf-8") == "first: 1\n"
+
+    # Second append simulates a subsequent upgrade producing more drift.
+    append_upgrade_block(p, "# second block\n")
+    # .bak now reflects post-first-append state, not the pristine original.
+    assert "# first block" in bak.read_text(encoding="utf-8")
+
+
+def test_append_aborts_if_dst_is_symlink(tmp_path):
+    # CWE-61 guard: a pre-existing symlink at .bak must not redirect the
+    # backup write. _safe_copy_bak uses O_NOFOLLOW.
+    p = _write(tmp_path, "data\n")
+    victim = tmp_path / "victim.txt"
+    victim.write_text("untouched", encoding="utf-8")
+    bak = p.with_suffix(p.suffix + ".bak")
+    bak.symlink_to(victim)
+    ok = append_upgrade_block(p, "# appended\n")
+    assert ok is False
+    assert victim.read_text(encoding="utf-8") == "untouched"
+    assert p.read_text(encoding="utf-8") == "data\n"
 
 
 def test_sync_user_config_appends_then_is_idempotent(tmp_path, monkeypatch):
@@ -350,6 +370,53 @@ def test_sync_user_config_no_config_returns_no_config(tmp_path):
     result = sync_user_config(p)
     assert result.skipped_reason == "no_config"
     assert result.appended_keys == []
+
+
+def test_sync_user_config_binary_garbage_does_not_raise(tmp_path):
+    # Pins the documented "never raises" contract against the most obvious
+    # corrupted-file case. read_text → UnicodeDecodeError → caught by the
+    # broad except in sync_user_config → io_error.
+    p = tmp_path / "config.yml"
+    p.write_bytes(b"\xff\xfe binary garbage \x00\x01")
+    result = sync_user_config(p)
+    assert result.skipped_reason == "io_error"
+    assert result.appended_keys == []
+
+
+def test_sync_user_config_oversized_file_does_not_hang(tmp_path):
+    # Defends against /dev/zero / runaway file pointed at by env var.
+    # find_missing_keys has a 1 MiB guard.
+    p = tmp_path / "config.yml"
+    p.write_bytes(b"# " + b"x" * (2 << 20))  # 2 MiB of harmless filler
+    result = sync_user_config(p)
+    # Skipped because find_missing_keys returns [] → no drift → no append.
+    # Whatever the reason, it must not raise and must not write a .bak.
+    assert result.appended_keys == []
+    assert not p.with_suffix(p.suffix + ".bak").exists()
+
+
+def test_schema_keys_unwraps_optional_dataclass(tmp_path):
+    # Latent crash: a future Optional[NestedDataclass] field would previously
+    # try to call dataclasses.fields(Optional[...]) and raise TypeError.
+    @dataclass
+    class _Inner:
+        x: int = 1
+
+    @dataclass
+    class _Outer:
+        inner: _Inner | None = field(default_factory=_Inner)
+
+    paths = [k.dotted_path for k in schema_keys(_Outer)]
+    assert paths == ["inner.x"]
+
+
+def test_dump_value_line_rejects_multi_line_default():
+    # Future-contributor footgun: a multi-line default would corrupt the
+    # appended block because only the first line would get the "# " prefix.
+    from eth_validator_stats.config_sync import _dump_value_line
+
+    with pytest.raises(ValueError, match="multiple lines"):
+        _dump_value_line("anykey", "line1\nline2")
 
 
 def test_sync_user_config_after_sync_yaml_still_parses(tmp_path):
