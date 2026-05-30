@@ -13,12 +13,12 @@ from eth_validator_stats._simulate import (
 def test_build_missed_attestation_default_last_2():
     title, body = build_missed_attestation(1234, "home-1")
     assert title == "validator 1234 home-1"
-    assert body == "MISSED_ATTESTATIONS last=2"
+    assert body == "❌ MISSED_ATTESTATIONS last=2"
 
 
 def test_build_missed_attestation_custom_last():
     title, body = build_missed_attestation(1234, "home-1", last=5)
-    assert body == "MISSED_ATTESTATIONS last=5"
+    assert body == "❌ MISSED_ATTESTATIONS last=5"
 
 
 def test_build_missed_attestation_no_label():
@@ -29,46 +29,46 @@ def test_build_missed_attestation_no_label():
 def test_build_offline_default_status_slashed():
     title, body = build_offline(1234, "home-1")
     assert title == "validator 1234 home-1"
-    assert body == "OFFLINE status=slashed"
+    assert body == "❌ OFFLINE status=slashed"
 
 
 def test_build_offline_custom_status():
     _, body = build_offline(1, "", status="exited_unslashed")
-    assert body == "OFFLINE status=exited_unslashed"
+    assert body == "❌ OFFLINE status=exited_unslashed"
 
 
 def test_build_withdrawal_default_amount():
     title, body = build_withdrawal(1234, "home-1")
     assert title == "validator 1234 home-1 withdrawal"
-    assert body == "0.0010 ETH withdrawn"  # 4-decimal format matches alerts.py
+    assert body == "💰 0.0010 ETH withdrawn"  # 4-decimal format matches alerts.py
 
 
 def test_build_withdrawal_custom_amount():
     _, body = build_withdrawal(1, "", amount_eth=0.5)
-    assert body == "0.5000 ETH withdrawn"
+    assert body == "💰 0.5000 ETH withdrawn"
 
 
 def test_build_proposing_soon_default():
     title, body = build_proposing_soon(1234, "home-1")
     assert title == "validator 1234 home-1 proposing soon"
-    assert body == "slot 12345 (~6 min away)"
+    assert body == "🔜 slot 12345 (~6 min away)"
 
 
 def test_build_proposing_soon_custom_slot_and_delay():
     _, body = build_proposing_soon(1, "", slot=999, delay="~30s")
-    assert body == "slot 999 (~30s away)"
+    assert body == "🔜 slot 999 (~30s away)"
 
 
 def test_build_proposed_default_slot():
     title, body = build_proposed(1234, "home-1")
     assert title == "validator 1234 home-1 proposed slot 12345"
-    assert body == "✓ block landed at slot 12345"
+    assert body == "✓ block proposed at slot 12345"
 
 
 def test_build_missed_proposal_default_slot():
     title, body = build_missed_proposal(1234, "home-1")
     assert title == "validator 1234 home-1 missed proposal at slot 12345"
-    assert body == "✗ no block produced at slot 12345"
+    assert body == "✗ missed block at slot 12345"
 
 
 # Re-imports below intentionally split out for readability — these
@@ -83,13 +83,13 @@ from eth_validator_stats._simulate import (  # noqa: E402
 def test_build_blind():
     title, body = build_blind()
     assert title == "MONITOR BLIND"
-    assert body == "beacon node unreachable: simulated"
+    assert body == "🚫 beacon node unreachable: simulated"
 
 
 def test_build_recovered():
     title, body = build_recovered()
     assert title == "MONITOR RECOVERED"
-    assert body == "beacon node reachable again"
+    assert body == "✅ beacon node reachable again"
 
 
 # --- lifecycle builders -----------------------------------------------------
@@ -200,7 +200,7 @@ def test_cmd_simulate_missed_attestation_uses_first_validator(tmp_path, monkeypa
 
     rc = cmd_simulate(_args("missed-attestation"), _notifier=StubNotifier())
     assert rc == 0
-    assert captured == [("validator 1234 home-1", "MISSED_ATTESTATIONS last=2")]
+    assert captured == [("validator 1234 home-1", "❌ MISSED_ATTESTATIONS last=2")]
 
 
 def test_cmd_simulate_validator_flag_selects_by_index(tmp_path, monkeypatch):
@@ -301,7 +301,7 @@ def test_cmd_simulate_blind_event_does_not_require_validator(tmp_path, monkeypat
 
     rc = cmd_simulate(_args("blind"), _notifier=StubNotifier())
     assert rc == 0
-    assert captured == [("MONITOR BLIND", "beacon node unreachable: simulated")]
+    assert captured == [("MONITOR BLIND", "🚫 beacon node unreachable: simulated")]
 
 
 def test_cmd_simulate_event_kwargs_forwarded(tmp_path, monkeypatch):
@@ -315,7 +315,7 @@ def test_cmd_simulate_event_kwargs_forwarded(tmp_path, monkeypatch):
 
     rc = cmd_simulate(_args("missed-attestation", last=7), _notifier=StubNotifier())
     assert rc == 0
-    assert captured[0][1] == "MISSED_ATTESTATIONS last=7"
+    assert captured[0][1] == "❌ MISSED_ATTESTATIONS last=7"
 
 
 def test_cmd_simulate_notifier_raises_exits_1(tmp_path, monkeypatch, capsys):
@@ -367,7 +367,7 @@ def test_simulate_end_to_end_via_main_hits_real_notifier(tmp_path, monkeypatch, 
 
     rc = cli_mod.main(["simulate", "missed-attestation"])
     assert rc == 0
-    assert captured == [("validator 42 end2end", "MISSED_ATTESTATIONS last=2")]
+    assert captured == [("validator 42 end2end", "❌ MISSED_ATTESTATIONS last=2")]
     out = capsys.readouterr().out
     assert "sent:" in out
 
