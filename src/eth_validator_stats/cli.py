@@ -801,7 +801,7 @@ app = typer.Typer(
     rich_markup_mode="rich",
     add_completion=False,
     no_args_is_help=True,
-    pretty_exceptions_show_locals=False,
+    pretty_exceptions_enable=False,
 )
 
 
@@ -1017,6 +1017,11 @@ def main(argv: list[str] | None = None) -> int:
         # Non-int code (string): treat as failure with stderr message.
         print(e.code, file=sys.stderr)
         return 1
+    except Exception as e:
+        logger.exception("unhandled error")
+        print(f"Error: {e}", file=sys.stderr)
+        print("Retry with --log-level DEBUG for a full traceback.", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

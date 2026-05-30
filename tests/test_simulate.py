@@ -68,7 +68,7 @@ def test_build_proposed_default_slot():
 def test_build_missed_proposal_default_slot():
     title, body = build_missed_proposal(1234, "home-1")
     assert title == "validator 1234 home-1 missed proposal at slot 12345"
-    assert body == "✗ missed block at slot 12345"
+    assert body == "❌ missed block at slot 12345"
 
 
 # Re-imports below intentionally split out for readability — these

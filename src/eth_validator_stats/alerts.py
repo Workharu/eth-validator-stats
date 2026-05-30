@@ -450,7 +450,7 @@ def process_proposal_outcomes(
             else:
                 notifier.send(
                     f"validator {idx}{label_part} missed proposal at slot {slot}",
-                    f"✗ missed block at slot {slot}",
+                    f"❌ missed block at slot {slot}",
                 )
             prop["verified"] = True
             prop["produced"] = produced

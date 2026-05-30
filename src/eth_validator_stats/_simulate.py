@@ -52,7 +52,7 @@ def build_proposed(idx: int, label: str, *, slot: int = 12345) -> tuple[str, str
 def build_missed_proposal(idx: int, label: str, *, slot: int = 12345) -> tuple[str, str]:
     return (
         f"validator {idx}{_label_part(label)} missed proposal at slot {slot}",
-        f"✗ missed block at slot {slot}",
+        f"❌ missed block at slot {slot}",
     )
 
 
