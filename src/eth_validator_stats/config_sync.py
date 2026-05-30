@@ -35,8 +35,11 @@ class SyncResult:
     #   "no_config"   load_config-resolved path doesn't exist
     #   "not_writable"  os.access W_OK returned False
     #   "disabled"  ETH_VALIDATOR_STATS_NO_CONFIG_SYNC=1
+    #   "sentinel"  user placed SENTINEL_DISABLE marker in their config
     #   "io_error"  copy/open raised
-    skipped_reason: Literal["no_config", "not_writable", "disabled", "io_error"] | None
+    skipped_reason: (
+        Literal["no_config", "not_writable", "disabled", "sentinel", "io_error"] | None
+    )
     appended_keys: list[str]  # dotted paths actually written to disk
 
 
@@ -125,6 +128,40 @@ def schema_keys(cls: type, _prefix: str = "") -> list[KeySpec]:
 
 
 _MAX_CONFIG_SIZE = 1 << 20  # 1 MiB — paranoia bound against /dev/zero or runaway files
+
+# Marker the operator can place anywhere in their config to disable
+# all future auto-appends. Substring-matched against the raw file text.
+SENTINEL_DISABLE = "# config-sync: off"
+
+# Per-key inline hints rendered as trailing comments in the appended
+# block. Keep terse — the goal is "what unit/meaning" not "full docs".
+# Missing keys render without a trailing comment.
+_KEY_HINTS: dict[str, str] = {
+    "beacon_auth_token": "optional bearer token (Infura / Alchemy / proxied node)",
+    "alerts.request_timeout_s": "seconds",
+    "alerts.daily_heartbeat_hour": "local time, 0-23",
+    "alerts.withdrawal_max_gap_slots": "slots; >this between polls disables withdrawal detection",
+    "alerts.proposal_lookahead_epochs": "epochs ahead to pre-notify; 0 disables",
+}
+
+
+def _format_key_line(
+    key: str,
+    value: object,
+    *,
+    indent: str,
+    dotted_path: str | None = None,
+) -> str:
+    """Format a single commented key/value line, optionally with a trailing hint.
+
+    `key` is the YAML key as it will appear (leaf for nested, dotted for root).
+    `dotted_path` is the lookup key for _KEY_HINTS; falls back to `key`.
+    """
+    line = indent + _dump_value_line(key, value)
+    hint = _KEY_HINTS.get(dotted_path or key)
+    if hint:
+        line = f"{line}  # {hint}"
+    return line
 
 
 def find_missing_keys(config_path: Path, keys: list[KeySpec]) -> list[KeySpec]:
@@ -229,15 +266,16 @@ def render_upgrade_block(
         "",
         f"# === Added by eth-validator-stats v{version} on {today.isoformat()} ===",
         "# New config keys introduced in this version. Defaults shown.",
-        "# See config.yml.example or README.md for what each does.",
-        "# (Delete a line if you want it re-added next upgrade; keep the bare",
-        "#  key name in a comment if you want to permanently suppress it.)",
+        "# Uncomment to enable; leave commented to silence permanently.",
+        "# See config.yml.example for details on each key.",
+        "# To disable all future auto-appends, add anywhere in this file:",
+        f"#     {SENTINEL_DISABLE}",
         "#",
     ]
 
     if root:
         for k in root:
-            lines.append("# " + _dump_value_line(k.dotted_path, k.default))
+            lines.append(_format_key_line(k.dotted_path, k.default, indent="# "))
         if group_order:
             lines.append("#")
 
@@ -245,7 +283,7 @@ def render_upgrade_block(
         lines.append(f"# {parent}:")
         for k in grouped[parent]:
             leaf = k.dotted_path.split(".", 1)[1]
-            lines.append("#   " + _dump_value_line(leaf, k.default))
+            lines.append(_format_key_line(leaf, k.default, indent="#   ", dotted_path=k.dotted_path))
         if i != len(group_order) - 1:
             lines.append("#")
 
@@ -340,6 +378,9 @@ def sync_user_config(path: Path) -> SyncResult:
         return SyncResult(skipped_reason="io_error", appended_keys=[])
 
     try:
+        text = path.read_text(encoding="utf-8")
+        if any(line.lstrip() == SENTINEL_DISABLE for line in text.splitlines()):
+            return SyncResult(skipped_reason="sentinel", appended_keys=[])
         keys = schema_keys(AppConfig)
         missing = find_missing_keys(path, keys)
     except Exception as exc:  # noqa: BLE001

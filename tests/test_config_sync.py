@@ -402,3 +402,77 @@ def test_cli_helper_respects_disable_env(tmp_path, monkeypatch):
     load_config_with_sync()
     # No append happened because sync was disabled.
     assert "# === Added by eth-validator-stats" not in cfg_path.read_text(encoding="utf-8")
+
+
+def test_render_upgrade_block_includes_hint_for_known_keys():
+    block = render_upgrade_block(
+        missing=[
+            KeySpec("beacon_auth_token", "", "str"),
+            KeySpec("alerts.daily_heartbeat_hour", 9, "int"),
+            KeySpec("alerts.heartbeat_url", "", "str"),  # no hint registered
+        ],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    # beacon_auth_token has a hint — should render with trailing comment.
+    assert "beacon_auth_token: ''  # optional bearer token" in block
+    # daily_heartbeat_hour has a hint — should carry the unit annotation.
+    assert "daily_heartbeat_hour: 9  # local time, 0-23" in block
+    # heartbeat_url has no hint — line should end without a trailing comment.
+    # (Spot-check by ensuring no extra "# " trails the bare key line.)
+    assert "heartbeat_url: ''\n" in block or "heartbeat_url: ''" == block.splitlines()[-1].lstrip("# ").rstrip()
+
+
+def test_render_upgrade_block_intro_drops_readme_pointer():
+    block = render_upgrade_block(
+        missing=[KeySpec("beacon_auth_token", "", "str")],
+        version="0.5.1",
+        today=datetime.date(2026, 5, 26),
+    )
+    # README pointer was misleading (most keys have no README entry) — removed.
+    assert "README.md" not in block
+    # Sentinel-disable mechanism is documented in the intro.
+    assert "# config-sync: off" in block
+
+
+def test_sync_user_config_respects_sentinel(tmp_path):
+    body = (
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "# config-sync: off\n"
+    )
+    p = _write(tmp_path, body)
+    result = sync_user_config(p)
+    assert result.skipped_reason == "sentinel"
+    assert result.appended_keys == []
+    # File untouched; no .bak either.
+    assert p.read_text(encoding="utf-8") == body
+    assert not p.with_suffix(p.suffix + ".bak").exists()
+
+
+def test_sync_user_config_sentinel_matches_after_lstrip(tmp_path):
+    # User indented the sentinel — still recognized.
+    body = (
+        "beacon_node_url: http://localhost:3500\n"
+        "validators: []\n"
+        "    # config-sync: off\n"
+    )
+    p = _write(tmp_path, body)
+    assert sync_user_config(p).skipped_reason == "sentinel"
+
+
+def test_sync_user_config_intro_sentinel_mention_does_not_self_trigger(tmp_path):
+    # The intro line embeds "    # config-sync: off" inside another comment
+    # (with leading "#     "). It must not be parsed as the bare sentinel.
+    body = "beacon_node_url: http://localhost:3500\nvalidators: []\n"
+    p = _write(tmp_path, body)
+    # First sync appends the block (which mentions the sentinel in its intro).
+    r1 = sync_user_config(p)
+    assert r1.skipped_reason is None
+    assert r1.appended_keys  # non-empty
+
+    # Second sync: must NOT detect the embedded mention as an active sentinel.
+    # It should find no drift (all keys already in file as comments) → no-op.
+    r2 = sync_user_config(p)
+    assert r2.skipped_reason is None  # not "sentinel"
+    assert r2.appended_keys == []
