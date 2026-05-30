@@ -46,13 +46,8 @@ from .alerts import (
     send_daily_heartbeat,
 )
 from .beacon import BeaconClient, ChainInfo, ValidatorInfo, epoch_of
-from .config_io import (
-    AppConfig,
-    ConfigEntry,
-    _resolve_existing_config,
-    load_config,
-)
-from .config_sync import sync_user_config
+from .config_io import AppConfig, ConfigEntry
+from .config_sync import load_config_with_sync
 from .onboarding import WizardArgs, run_wizard
 from .render import DisplayRow, build_table
 
@@ -62,16 +57,6 @@ LIVENESS_BUFFER_LEN = 10
 N_ATTS_DISPLAYED = 5
 SYSTEM_CONFIG_PATH = Path("/etc/eth-validator-stats/config.yml")
 SYSTEM_STATE_DIR = Path("/var/lib/eth-validator-stats")
-
-
-def load_config_with_sync() -> AppConfig:
-    """load_config() + best-effort schema sync. Never raises from sync."""
-    cfg = load_config()
-    try:
-        sync_user_config(_resolve_existing_config())
-    except Exception:  # noqa: BLE001 — defense in depth; sync_user_config is already no-raise
-        pass
-    return cfg
 
 
 def state_path() -> Path:

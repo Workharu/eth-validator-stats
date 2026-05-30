@@ -9,8 +9,8 @@ from eth_validator_stats.alerts import AlertsConfig
 from eth_validator_stats.config_io import (
     AppConfig,
     ConfigEntry,
-    _resolve_existing_config,
     load_config,
+    resolve_config_path,
     write_config,
 )
 
@@ -158,7 +158,7 @@ def test_resolver_finds_system_config_when_user_config_absent(
         lambda _: tmp_path / "no-such-home" / ".config",
     )
 
-    p = _resolve_existing_config()
+    p = resolve_config_path()
     assert p == fake_etc
 
 

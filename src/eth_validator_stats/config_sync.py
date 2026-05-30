@@ -13,7 +13,7 @@ from typing import Any, Literal
 import yaml
 
 from . import __version__ as _PACKAGE_VERSION
-from .config_io import AppConfig
+from .config_io import AppConfig, load_config, resolve_config_path
 
 logger = logging.getLogger(__name__)
 
@@ -361,3 +361,13 @@ def sync_user_config(path: Path) -> SyncResult:
         skipped_reason=None,
         appended_keys=[k.dotted_path for k in missing],
     )
+
+
+def load_config_with_sync() -> AppConfig:
+    """load_config() + best-effort schema sync. Never raises from sync."""
+    cfg = load_config()
+    try:
+        sync_user_config(resolve_config_path())
+    except Exception:  # noqa: BLE001 — defense in depth; sync_user_config is already no-raise
+        pass
+    return cfg

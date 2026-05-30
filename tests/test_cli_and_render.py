@@ -277,7 +277,7 @@ def test_cmd_status_is_read_only_by_default(monkeypatch, tmp_path):
 
     class _Cfg:
         validators = []
-    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+    monkeypatch.setattr(cli_mod, "load_config_with_sync", lambda: _Cfg())
 
     import argparse
     args = argparse.Namespace(refresh=False)
@@ -304,7 +304,7 @@ def test_cmd_status_refresh_flag_polls_and_saves(monkeypatch, tmp_path):
 
     class _Cfg:
         validators = []
-    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+    monkeypatch.setattr(cli_mod, "load_config_with_sync", lambda: _Cfg())
 
     import argparse
     args = argparse.Namespace(refresh=True)
@@ -336,7 +336,7 @@ def test_cmd_status_prints_staleness_footer(monkeypatch, tmp_path, capsys):
     class _Cfg:
         validators = []
 
-    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+    monkeypatch.setattr(cli_mod, "load_config_with_sync", lambda: _Cfg())
 
     import argparse
     rc = cli_mod.cmd_status(argparse.Namespace(refresh=False))
@@ -358,7 +358,7 @@ def test_cmd_status_prints_hint_when_state_is_empty(monkeypatch, tmp_path, capsy
     class _Cfg:
         validators = []
 
-    monkeypatch.setattr(cli_mod, "load_config", lambda: _Cfg())
+    monkeypatch.setattr(cli_mod, "load_config_with_sync", lambda: _Cfg())
 
     import argparse
     rc = cli_mod.cmd_status(argparse.Namespace(refresh=False))

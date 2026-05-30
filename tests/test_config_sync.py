@@ -382,7 +382,7 @@ def test_cli_helper_uses_resolved_path(tmp_path, monkeypatch):
     cfg_path.write_text(body, encoding="utf-8")
     monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
 
-    from eth_validator_stats.cli import load_config_with_sync
+    from eth_validator_stats.config_sync import load_config_with_sync
 
     cfg = load_config_with_sync()
     assert cfg.beacon_node_url == "http://localhost:3500"
@@ -397,7 +397,7 @@ def test_cli_helper_respects_disable_env(tmp_path, monkeypatch):
     monkeypatch.setenv("ETH_VALIDATOR_STATS_CONFIG", str(cfg_path))
     monkeypatch.setenv("ETH_VALIDATOR_STATS_NO_CONFIG_SYNC", "1")
 
-    from eth_validator_stats.cli import load_config_with_sync
+    from eth_validator_stats.config_sync import load_config_with_sync
 
     load_config_with_sync()
     # No append happened because sync was disabled.
